@@ -1,0 +1,20 @@
+gymnasium==0.28.1
+shimmy>=0.2.1
+stable-baselines3==2.2.1
+
+numpy==1.26.4
+matplotlib==3.7.5
+scipy==1.11.4
+
+noise==1.2.2
+opencv-python==4.9.0.80
+
+torch==2.1.2
+tensorboard==2.15.1
+
+# Video export (MP4 — needs system ffmpeg too: choco install ffmpeg)
+# GIF fallback uses Pillow which ships with matplotlib
+Pillow>=10.0.0
+
+# Interactive 3D visualization and dashboard
+plotly>=6.0.0

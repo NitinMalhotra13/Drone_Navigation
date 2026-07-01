@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.gridspec import GridSpec
 from matplotlib.animation import FuncAnimation, PillowWriter
+from mpl_toolkits.mplot3d import Axes3D
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 sys.path.insert(0, SRC)
@@ -34,7 +35,7 @@ RA_ITERS       = 20
 FA_WP_FILE     = os.path.join(os.path.dirname(__file__), "dataset", "fa_waypoints.npy")
 VIDEO_OUT      = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.gif")
 MP4_OUT        = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.mp4")
-FRAME_SKIP     = 3            # capture every 3rd frame for smooth video
+FRAME_SKIP     = 5            # capture every 5th frame for smooth video
 FPS            = 10           # slower playback for easier human tracking
 VIDEO_DPI      = 90           # optimized DPI for fast render
 
@@ -349,16 +350,17 @@ print("-" * 65)
 print(f"\n[VIDEO] Rendering {len(frames)} frames using optimized in-place updates...")
 t_vid_start = time.time()
 
-fig = plt.figure(figsize=(18, 10), facecolor="#0d0d1a")
+fig = plt.figure(figsize=(24, 11), facecolor="#0d0d1a")
 fig.suptitle("Multi-Drone Coverage  |  FA + RA + PPO  |  6 Drones  |  100x100 Grid",
-             color="white", fontsize=13, fontweight="bold", y=0.98)
+             color="white", fontsize=14, fontweight="bold", y=0.98)
 
-gs      = GridSpec(2, 2, figure=fig, hspace=0.40, wspace=0.30,
-                   left=0.06, right=0.97, top=0.93, bottom=0.06)
+gs      = GridSpec(2, 3, figure=fig, hspace=0.40, wspace=0.30,
+                   left=0.05, right=0.98, top=0.92, bottom=0.06)
 ax_map  = fig.add_subplot(gs[0, 0])
-ax_met  = fig.add_subplot(gs[0, 1])
+ax_map_3d = fig.add_subplot(gs[0, 1], projection='3d')
+ax_met  = fig.add_subplot(gs[0, 2])
 ax_bat  = fig.add_subplot(gs[1, 0])
-ax_stat = fig.add_subplot(gs[1, 1])
+ax_stat = fig.add_subplot(gs[1, 1:])
 
 for ax in [ax_map, ax_met, ax_bat, ax_stat]:
     ax.set_facecolor("#131328")
@@ -378,17 +380,37 @@ ax_map.contour(X_t, Y_t, env.terrain.T, levels=8,
 ax_map.contourf(X_t, Y_t, env.terrain.T, levels=8,
                 cmap="terrain", alpha=0.25)  # more visible filled terrain tint
 
+# ── 3D Map Panel (Initialize Static Surface, Contours, and Obstacles) ──────
+ax_map_3d.set_facecolor("#131328")
+try:
+    ax_map_3d.xaxis.set_pane_color((0.07, 0.07, 0.15, 1.0))
+    ax_map_3d.yaxis.set_pane_color((0.07, 0.07, 0.15, 1.0))
+    ax_map_3d.zaxis.set_pane_color((0.09, 0.09, 0.18, 1.0))
+except AttributeError:
+    ax_map_3d.w_xaxis.set_pane_color((0.07, 0.07, 0.15, 1.0))
+    ax_map_3d.w_yaxis.set_pane_color((0.07, 0.07, 0.15, 1.0))
+    ax_map_3d.w_zaxis.set_pane_color((0.09, 0.09, 0.18, 1.0))
+ax_map_3d.tick_params(colors="#aaaacc")
+ax_map_3d.xaxis.label.set_color("white")
+ax_map_3d.yaxis.label.set_color("white")
+ax_map_3d.zaxis.label.set_color("white")
+ax_map_3d.title.set_color("white")
+ax_map_3d.grid(True, color="#2c2c4d")
+
+# 3D terrain surface
+ax_map_3d.plot_surface(X_t, Y_t, env.terrain.T, rstride=4, cstride=4, cmap="terrain", alpha=0.3, zorder=1)
+# 3D contours
+ax_map_3d.contour(X_t, Y_t, env.terrain.T, levels=8, zdir='z', offset=0, colors=["#4b92db"], linewidths=1.0, alpha=0.6, zorder=2)
+
 # ── Static obstacles as SCATTER MARKERS (large, clearly visible) ───────────
 # Extract obstacle cell positions from the 3D static grid (specifically at flight cruise altitude)
-# Since drones fly at z=6.0, we only draw obstacles that exist at index z=6.
-# This prevents overlapping drawing of obstacles that the drones fly safely above.
 obs_2d = env.static[:, :, 6]  # (100, 100) bool
 obs_mask_2d = obs_2d  # kept for coverage masking in animate()
 obs_coords = np.argwhere(obs_2d)  # (N, 2) array of [x, y] obstacle positions
 
 if len(obs_coords) > 0:
     ox, oy = obs_coords[:, 0], obs_coords[:, 1]
-    # Draw obstacles as filled squares — large enough to be clearly visible in video
+    # Draw 2D obstacles
     ax_map.scatter(ox, oy, s=18, marker="s", c="#8B4513",
                    edgecolors="#5a2d0c", linewidths=0.3,
                    alpha=0.85, zorder=5, label=f"Static Obstacles ({len(obs_coords)})")
@@ -396,16 +418,77 @@ if len(obs_coords) > 0:
 else:
     print("[VIDEO] WARNING: No static obstacles found in env.static!")
 
-# Draw Important Home & Landing Zones (allowed to be overlapped)
+# Parse 3D Static Grid to render realistic Trees (with leafy bushes) and Rocks on 3D view
+tx, ty, tz = env.static.shape
+tree_trunks_x, tree_trunks_y, tree_trunks_z = [], [], []
+tree_leaves_x, tree_leaves_y, tree_leaves_z = [], [], []
+rocks_x, rocks_y, rocks_z = [], [], []
+
+for x in range(tx):
+    for y in range(ty):
+        blocked_zs = np.where(env.static[x, y])[0]
+        if len(blocked_zs) > 0:
+            z_min = int(blocked_zs.min())
+            z_max = int(blocked_zs.max())
+            height = z_max - z_min + 1
+            
+            if height >= 5:  # Tree!
+                for z_val in range(z_min, z_max - 1):
+                    tree_trunks_x.append(x + 0.5)
+                    tree_trunks_y.append(y + 0.5)
+                    tree_trunks_z.append(z_val + 0.5)
+                # Volumetric crown dome (leafy crown)
+                tree_leaves_x.append(x + 0.5)
+                tree_leaves_y.append(y + 0.5)
+                tree_leaves_z.append(z_max + 0.5)
+                offsets = [
+                    (0.3, 0, -0.2), (-0.3, 0, -0.2), (0, 0.3, -0.2), (0, -0.3, -0.2),
+                    (0.2, 0.2, -0.5), (-0.2, -0.2, -0.5), (0.2, -0.2, -0.5), (-0.2, 0.2, -0.5)
+                ]
+                for dx, dy, dz_off in offsets:
+                    tree_leaves_x.append(x + 0.5 + dx)
+                    tree_leaves_y.append(y + 0.5 + dy)
+                    tree_leaves_z.append(z_max + 0.5 + dz_off)
+            else:  # Rock!
+                for z_val in blocked_zs:
+                    rocks_x.append(x + 0.5)
+                    rocks_y.append(y + 0.5)
+                    rocks_z.append(z_val + 0.5)
+
+# Render static obstacles in 3D
+if len(tree_trunks_x) > 0:
+    ax_map_3d.scatter(tree_trunks_x, tree_trunks_y, tree_trunks_z, s=4, c="#5a3d28", marker="s", alpha=0.9, depthshade=True, zorder=3)
+if len(tree_leaves_x) > 0:
+    ax_map_3d.scatter(tree_leaves_x, tree_leaves_y, tree_leaves_z, s=15, c="#2e8b57", marker="o", alpha=0.6, depthshade=True, zorder=4)
+if len(rocks_x) > 0:
+    ax_map_3d.scatter(rocks_x, rocks_y, rocks_z, s=6, c="#696969", marker="d", alpha=0.8, depthshade=True, zorder=3)
+
+# Draw Important Home & Landing Zones (2D circles)
 ax_map.add_patch(mpatches.Circle((5, 5), 10, fill=False, edgecolor="cyan", linestyle="--", linewidth=1.2, hatch="//", alpha=0.5, zorder=4))
 ax_map.add_patch(mpatches.Circle((95, 95), 10, fill=False, edgecolor="cyan", linestyle="--", linewidth=1.2, hatch="//", alpha=0.5, zorder=4))
 
-# Recharge stations (static)
+# Recharge stations (2D + 3D)
 ax_map.scatter(rs_xy[:, 0], rs_xy[:, 1], s=130, marker="s",
                c="magenta", edgecolors="white", linewidths=0.9, zorder=6)
 for rx, ry in rs_xy:
     ax_map.text(rx, ry + 2.5, "R", color="magenta", fontsize=7,
                 ha="center", va="bottom", fontweight="bold")
+
+# Recharge stations in 3D
+rs_z = []
+for rx, ry in rs_xy:
+    rx_idx = int(np.clip(rx, 0, 99))
+    ry_idx = int(np.clip(ry, 0, 99))
+    rs_z.append(float(env.terrain[rx_idx, ry_idx]) + 0.15)
+ax_map_3d.scatter(rs_xy[:, 0], rs_xy[:, 1], rs_z, s=80, c="magenta", marker="X", depthshade=True, zorder=5)
+
+# 3D Goals
+for i in range(N_DRONES):
+    goal = goal_positions[i]
+    gx_idx = int(np.clip(goal[0], 0, 99))
+    gy_idx = int(np.clip(goal[1], 0, 99))
+    gz = float(env.terrain[gx_idx, gy_idx])
+    ax_map_3d.scatter([goal[0]], [goal[1]], [gz], s=90, c=DRONE_COLORS[i], marker="*", alpha=0.9, zorder=5)
 
 # Legend
 from matplotlib.lines import Line2D
@@ -423,15 +506,18 @@ ax_map.legend(handles=[leg_obstacles, leg_dyn, leg_recharge, leg_home, leg_terra
 
 # ── [0,0] Map Panel (Initialize DYNAMIC Artists) ───────────────────────────
 # Coverage heatmap at zorder=2 — below obstacles (zorder=6) and drones (zorder=7)
-# Initialise with NaNs so that uncovered cells are completely transparent, showing the terrain contours beneath!
 init_cov = np.full((100, 100), np.nan)
 im_cov = ax_map.imshow(init_cov, origin="lower", cmap="YlGn",
-                       vmin=0, vmax=1, alpha=0.55,  # lower alpha (0.55) so the terrain contours show through beautifully
+                       vmin=0, vmax=1, alpha=0.55,
                        extent=[0, 100, 0, 100], aspect="auto", zorder=2)
 
 sc_dyn = ax_map.scatter([], [], s=50, c="royalblue",
                         alpha=0.75, edgecolors="white", linewidths=0.4,
                         zorder=4, marker="o")
+
+# ── 3D Map Panel (Initialize DYNAMIC Artists) ──────────────────────────────
+sc_dyn_3d = ax_map_3d.scatter([], [], [], s=25, c="royalblue",
+                            alpha=0.75, edgecolors="white", linewidths=0.4, zorder=5)
 
 # Create arrays of per-drone path lines, dot markers, waypoints, and labels
 line_paths = []
@@ -441,29 +527,51 @@ sc_wpts    = []
 line_wpts  = []
 sc_goals   = []
 
+# 3D counterparts
+line_paths_3d = []
+sc_drones_3d  = []
+sc_wpts_3d    = []
+line_wpts_3d  = []
+
 for i in range(N_DRONES):
     col = DRONE_COLORS[i]
-    # Trajectory path line
+    # 2D Trajectory path line
     lp, = ax_map.plot([], [], color=col, linewidth=1.1, alpha=0.55, zorder=3)
     line_paths.append(lp)
     
-    # Current drone coordinate triangle marker
+    # 3D Trajectory path line
+    lp3d, = ax_map_3d.plot([], [], [], color=col, linewidth=1.5, alpha=0.6, zorder=4)
+    line_paths_3d.append(lp3d)
+    
+    # Current 2D drone coordinate triangle marker
     sd = ax_map.scatter([], [], s=100, c=col, edgecolors="white", linewidths=0.9, zorder=6, marker="^")
     sc_drones.append(sd)
+    
+    # Current 3D drone coordinate cone marker
+    sd3d = ax_map_3d.scatter([], [], [], s=60, c=col, edgecolors="white", linewidths=0.8, marker="^", zorder=6)
+    sc_drones_3d.append(sd3d)
     
     # Drone label text
     td = ax_map.text(0, 0, f"D{i}", fontsize=6.5, color=col, fontweight="bold", zorder=7)
     txt_drones.append(td)
     
-    # Active sub-waypoint target marker
+    # Active 2D target marker
     sw = ax_map.scatter([], [], s=45, marker="x", c=col, linewidths=1.3, alpha=0.8, zorder=5)
     sc_wpts.append(sw)
     
-    # Target guidance dashed line
+    # Active 3D target marker
+    sw3d = ax_map_3d.scatter([], [], [], s=30, marker="x", c=col, linewidths=1.1, alpha=0.8, zorder=5)
+    sc_wpts_3d.append(sw3d)
+    
+    # 2D guidance line
     lw, = ax_map.plot([], [], color=col, linewidth=0.5, alpha=0.35, linestyle="--", zorder=4)
     line_wpts.append(lw)
     
-    # Final unified goal star (static)
+    # 3D guidance line
+    lw3d, = ax_map_3d.plot([], [], [], color=col, linewidth=0.6, alpha=0.4, linestyle="--", zorder=4)
+    line_wpts_3d.append(lw3d)
+    
+    # Final unified goal star (2D)
     goal = goal_positions[i]
     sg = ax_map.scatter(goal[0], goal[1], s=130, marker="*",
                         facecolors="none", edgecolors=col, linewidths=1.5, zorder=5)
@@ -474,6 +582,13 @@ for i in range(N_DRONES):
 
 ax_map.set_xlim(0, 100); ax_map.set_ylim(0, 100)
 ax_map.set_xlabel("X (m)", fontsize=8); ax_map.set_ylabel("Y (m)", fontsize=8)
+ax_map.set_title("2D Map View", fontsize=9, color="white")
+
+ax_map_3d.set_xlim(0, 100); ax_map_3d.set_ylim(0, 100); ax_map_3d.set_zlim(0, 15)
+ax_map_3d.set_xlabel("X (m)", fontsize=8); ax_map_3d.set_ylabel("Y (m)", fontsize=8); ax_map_3d.set_zlabel("Z (m)", fontsize=8)
+ax_map_3d.set_title("3D Map View", fontsize=9, color="white")
+ax_map_3d.view_init(elev=28, azim=-45)
+
 
 # ── [0,1] Metrics Panel (Initialize Artists) ──────────────────────────────
 line_cov, = ax_met.plot([], [], color="#00ff88", linewidth=1.5, label="Coverage %")
@@ -548,6 +663,8 @@ def animate(fi):
     if fd["dyn_pos"]:
         dp = np.array(fd["dyn_pos"])
         sc_dyn.set_offsets(dp[:, :2])
+        # Update 3D dynamic obstacles
+        sc_dyn_3d._offsets3d = (dp[:, 0], dp[:, 1], dp[:, 2])
     
     for i in range(N_DRONES):
         col  = DRONE_COLORS[i]
@@ -555,14 +672,23 @@ def animate(fi):
         if len(path) > 1:
             pts = np.array(path)
             line_paths[i].set_data(pts[:, 0], pts[:, 1])
+            # Update 3D drone path
+            line_paths_3d[i].set_data(pts[:, 0], pts[:, 1])
+            line_paths_3d[i].set_3d_properties(pts[:, 2])
         pos = fd["positions"][i]
         sc_drones[i].set_offsets(pos[:2])
         txt_drones[i].set_position((pos[0] + 3, pos[1] + 3))
+        # Update 3D drone position
+        sc_drones_3d[i]._offsets3d = (np.array([pos[0]]), np.array([pos[1]]), np.array([pos[2]]))
         
         # waypoint target
         wpt = fd["active_wpt"][i]
         sc_wpts[i].set_offsets(wpt[:2])
         line_wpts[i].set_data([pos[0], wpt[0]], [pos[1], wpt[1]])
+        # Update 3D waypoint target and guidance line
+        sc_wpts_3d[i]._offsets3d = (np.array([wpt[0]]), np.array([wpt[1]]), np.array([wpt[2]]))
+        line_wpts_3d[i].set_data([pos[0], wpt[0]], [pos[1], wpt[1]])
+        line_wpts_3d[i].set_3d_properties([pos[2], wpt[2]])
 
     ax_map.set_title(
         f"Step {fd['step']:4d}  |  Coverage: {fd['cov_pct']:.1f}%"
@@ -645,186 +771,412 @@ size_mb = os.path.getsize(saved_path) / 1024 / 1024
 print(f"[VIDEO] File size: {size_mb:.1f} MB")
 print(f"[VIDEO] Rendering complete in {time.time() - t_vid_start:.1f} s")
 
-# ── Generate Plotly Interactive 3D (Identical Twin) ──────────────────────────
+# ── Generate Plotly Interactive 2D & 3D Web Dashboard ──────────────────────────
 try:
     import plotly.graph_objects as go
-    print("\n[VISUAL] Constructing identical interactive 3D Plotly twin...")
-    fig3d = go.Figure()
+    from plotly.subplots import make_subplots
+    print("\n[VISUAL] Constructing side-by-side synchronized 2D & 3D Plotly Web Dashboard...")
     
-    # 1. Terrain Surface with vibrant blue contours
+    # Create subplots
+    fig3d = make_subplots(
+        rows=1, cols=2,
+        specs=[[{"type": "xy"}, {"type": "scene"}]],
+        subplot_titles=("2D Top-Down View", "Interactive 3D View")
+    )
+    
+    # Downsample frames for smooth, fast HTML playback without ballooning file sizes
+    total_anim_frames = len(frames)
+    plotly_step_skip = max(1, total_anim_frames // 60)
+    plotly_frames = frames[::plotly_step_skip]
+    if len(plotly_frames) > 0 and plotly_frames[-1]["step"] != frames[-1]["step"]:
+        plotly_frames.append(frames[-1])
+        
+    f0 = plotly_frames[0]
     X_t = np.arange(100)
     Y_t = np.arange(100)
+    
+    # ── LEFT SUBPLOT (2D View) ────────────────────────────────────────────────
+    
+    # 0. 2D Terrain Contours
+    fig3d.add_trace(go.Contour(
+        x=X_t, y=Y_t, z=env.terrain.T,
+        colorscale="Earth",
+        opacity=0.6,
+        showscale=False,
+        contours=dict(coloring="heatmap", showlabels=False),
+        hoverinfo="z",
+        name="2D Terrain"
+    ), row=1, col=1)
+    
+    # 1. 2D Recharge Stations
+    fig3d.add_trace(go.Scatter(
+        x=rs_xy[:, 0], y=rs_xy[:, 1],
+        mode="markers+text",
+        marker=dict(size=12, symbol="square", color="magenta", line=dict(width=1, color="white")),
+        text=["R"] * len(rs_xy),
+        textposition="middle center",
+        textfont=dict(size=8, color="white", weight="bold"),
+        name="Recharge stations",
+        showlegend=False
+    ), row=1, col=1)
+    
+    # 2. 2D Home/Goal Zones
+    fig3d.add_trace(go.Scatter(
+        x=[5, 95], y=[5, 95],
+        mode="markers",
+        marker=dict(size=30, symbol="circle-open", color="cyan", line=dict(width=2, dash="dash")),
+        name="Home/Goal Zones",
+        showlegend=False
+    ), row=1, col=1)
+    
+    # 3. 2D Coverage Heatmap
+    cov_2d_z_init = f0["coverage"].astype(float).copy()
+    cov_2d_z_init[obs_mask_2d] = np.nan
+    fig3d.add_trace(go.Heatmap(
+        x=X_t, y=Y_t, z=cov_2d_z_init.T,
+        colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(46, 139, 87, 0.6)"]],
+        zmin=0, zmax=1,
+        showscale=False,
+        hoverinfo="skip",
+        name="2D Coverage Heatmap"
+    ), row=1, col=1)
+    
+    # 4. 2D Dynamic Obstacles
+    dyn_pos_init = np.array(f0["dyn_pos"]) if f0["dyn_pos"] else np.empty((0, 3))
+    if len(dyn_pos_init) > 0:
+        fig3d.add_trace(go.Scatter(
+            x=dyn_pos_init[:, 0], y=dyn_pos_init[:, 1],
+            mode="markers",
+            marker=dict(size=8, symbol="circle", color="royalblue", line=dict(width=1, color="white")),
+            name="2D Dynamic Obstacles",
+            showlegend=False
+        ), row=1, col=1)
+    else:
+        fig3d.add_trace(go.Scatter(
+            x=[], y=[],
+            mode="markers",
+            marker=dict(size=8, symbol="circle", color="royalblue", line=dict(width=1, color="white")),
+            name="2D Dynamic Obstacles",
+            showlegend=False
+        ), row=1, col=1)
+        
+    # Drone Traces in 2D
+    for i in range(N_DRONES):
+        col = DRONE_COLORS[i]
+        path_init = np.array(f0["drone_paths"][i])
+        pos_init = f0["positions"][i]
+        wpt_init = f0["active_wpt"][i]
+        
+        # Path trace (5 + 3*i)
+        fig3d.add_trace(go.Scatter(
+            x=path_init[:, 0] if len(path_init) > 0 else [pos_init[0]],
+            y=path_init[:, 1] if len(path_init) > 0 else [pos_init[1]],
+            mode="lines",
+            line=dict(color=col, width=2),
+            name=f"Drone {i} Path",
+            legendgroup=f"drone_{i}",
+            showlegend=True
+        ), row=1, col=1)
+        
+        # Position trace (6 + 3*i)
+        fig3d.add_trace(go.Scatter(
+            x=[pos_init[0]], y=[pos_init[1]],
+            mode="markers+text",
+            marker=dict(size=10, symbol="triangle-up", color=col, line=dict(width=1, color="white")),
+            text=f"D{i}",
+            textposition="top center",
+            textfont=dict(size=9, color=col),
+            name=f"Drone {i} 2D",
+            legendgroup=f"drone_{i}",
+            showlegend=False
+        ), row=1, col=1)
+        
+        # Waypoint trace (7 + 3*i)
+        fig3d.add_trace(go.Scatter(
+            x=[wpt_init[0]], y=[wpt_init[1]],
+            mode="markers",
+            marker=dict(size=8, symbol="x-thin", color=col, line=dict(width=1.5)),
+            name=f"D{i} Target 2D",
+            legendgroup=f"drone_{i}",
+            showlegend=False
+        ), row=1, col=1)
+        
+    # ── RIGHT SUBPLOT (3D View) ───────────────────────────────────────────────
+    
+    # 23. 3D Terrain Surface
     fig3d.add_trace(go.Surface(
         x=X_t, y=Y_t, z=env.terrain.T,
-        colorscale="earth",
+        colorscale="Earth",
         opacity=0.7,
         showscale=False,
         hoverinfo="z",
-        name="Terrain Elevation",
+        name="3D Terrain",
         contours=dict(
             z=dict(show=True, usecolormap=False, color="#4b92db", width=2.0, start=0.5, end=14.5, size=2.0)
         )
-    ))
+    ), row=1, col=2)
     
-    # 1b. Translucent Coverage Heatmap draped over 3D terrain
-    z_cov = env.terrain.copy()
-    z_cov[~env.coverage_grid] = np.nan
-    z_cov[env.static[:, :, 6]] = np.nan
+    # 24. 3D Coverage Heatmap Surface
+    cov_3d_z_init = env.terrain.T.copy()
+    cov_3d_z_init[~f0["coverage"].T] = np.nan
+    cov_3d_z_init[obs_mask_2d.T] = np.nan
     fig3d.add_trace(go.Surface(
-        x=X_t, y=Y_t, z=z_cov.T + 0.1,
+        x=X_t, y=Y_t, z=cov_3d_z_init + 0.1,
         colorscale=[[0, "#2e8b57"], [1, "#2e8b57"]],
         opacity=0.55,
         showscale=False,
         hoverinfo="skip",
-        name="Area Coverage Heatmap"
-    ))
+        name="3D Coverage"
+    ), row=1, col=2)
     
-    # 2. Parse 3D Static Grid to render realistic Trees (with leafy bushes) and Rocks
-    tx, ty, tz = env.static.shape
-    tree_trunks_x, tree_trunks_y, tree_trunks_z = [], [], []
-    tree_leaves_x, tree_leaves_y, tree_leaves_z = [], [], []
-    rocks_x, rocks_y, rocks_z = [], [], []
-    
-    for x in range(tx):
-        for y in range(ty):
-            blocked_zs = np.where(env.static[x, y])[0]
-            if len(blocked_zs) > 0:
-                z_min = int(blocked_zs.min())
-                z_max = int(blocked_zs.max())
-                height = z_max - z_min + 1
-                
-                if height >= 5:
-                    for z_val in range(z_min, z_max - 1):
-                        tree_trunks_x.append(x + 0.5)
-                        tree_trunks_y.append(y + 0.5)
-                        tree_trunks_z.append(z_val + 0.5)
-                    tree_leaves_x.append(x + 0.5)
-                    tree_leaves_y.append(y + 0.5)
-                    tree_leaves_z.append(z_max + 0.5)
-                    offsets = [
-                        (0.3, 0, -0.2), (-0.3, 0, -0.2), (0, 0.3, -0.2), (0, -0.3, -0.2),
-                        (0.2, 0.2, -0.5), (-0.2, -0.2, -0.5), (0.2, -0.2, -0.5), (-0.2, 0.2, -0.5)
-                    ]
-                    for dx, dy, dz_off in offsets:
-                        tree_leaves_x.append(x + 0.5 + dx)
-                        tree_leaves_y.append(y + 0.5 + dy)
-                        tree_leaves_z.append(z_max + 0.5 + dz_off)
-                else:
-                    for z_val in blocked_zs:
-                        rocks_x.append(x + 0.5)
-                        rocks_y.append(y + 0.5)
-                        rocks_z.append(z_val + 0.5)
-                        
+    # 25. Tree Trunks
     if len(tree_trunks_x) > 0:
         fig3d.add_trace(go.Scatter3d(
             x=tree_trunks_x, y=tree_trunks_y, z=tree_trunks_z,
             mode="markers",
-            marker=dict(size=3, symbol="square", color="#5a3d28", opacity=0.9),
-            name="Tree Trunks (Wood)"
-        ))
+            marker=dict(size=2.5, symbol="square", color="#5a3d28", opacity=0.9),
+            name="Tree Trunks",
+            showlegend=False
+        ), row=1, col=2)
+        
+    # 26. Tree Leaves
     if len(tree_leaves_x) > 0:
         fig3d.add_trace(go.Scatter3d(
             x=tree_leaves_x, y=tree_leaves_y, z=tree_leaves_z,
             mode="markers",
-            marker=dict(size=6.5, symbol="circle", color="#2e8b57", opacity=0.6, line=dict(width=0)),
-            name="Tree Leaves (Proper Bush)"
-        ))
+            marker=dict(size=5.5, symbol="circle", color="#2e8b57", opacity=0.6, line=dict(width=0)),
+            name="Bushes",
+            showlegend=False
+        ), row=1, col=2)
+        
+    # 27. Rocks
     if len(rocks_x) > 0:
         fig3d.add_trace(go.Scatter3d(
             x=rocks_x, y=rocks_y, z=rocks_z,
             mode="markers",
-            marker=dict(size=4.5, symbol="diamond", color="#696969", opacity=0.8),
-            name="Static Rocks / Boulders"
-        ))
+            marker=dict(size=4.0, symbol="diamond", color="#696969", opacity=0.8),
+            name="Rocks",
+            showlegend=False
+        ), row=1, col=2)
         
-    # 3. Recharge Stations on Terrain
-    rs_xy = np.array(RECHARGE_STATIONS_XY, dtype=float)
-    rs_z = []
-    for rx, ry in rs_xy:
-        rx_idx = int(np.clip(rx, 0, 99))
-        ry_idx = int(np.clip(ry, 0, 99))
-        rs_z.append(float(env.terrain[rx_idx, ry_idx]) + 0.1)
-        
+    # 28. Recharge Stations
     fig3d.add_trace(go.Scatter3d(
         x=rs_xy[:, 0], y=rs_xy[:, 1], z=rs_z,
-        mode="markers+text",
-        marker=dict(size=9, symbol="cross", color="magenta", line=dict(width=1.2, color="white")),
-        text=["Recharge Station"] * len(rs_xy),
-        textposition="top center",
-        textfont=dict(size=8, color="magenta"),
-        name="Recharge Stations"
-    ))
+        mode="markers",
+        marker=dict(size=8, symbol="cross", color="magenta", line=dict(width=1.0, color="white")),
+        name="Recharge Pads",
+        showlegend=False
+    ), row=1, col=2)
     
-    # 3b. Dynamic Obstacles
-    dyn_pos = np.array([p.copy() for p in env.dyn.positions])
-    if len(dyn_pos) > 0:
+    # 29. Dynamic Obstacles
+    if len(dyn_pos_init) > 0:
         fig3d.add_trace(go.Scatter3d(
-            x=dyn_pos[:, 0], y=dyn_pos[:, 1], z=dyn_pos[:, 2],
+            x=dyn_pos_init[:, 0], y=dyn_pos_init[:, 1], z=dyn_pos_init[:, 2],
             mode="markers",
-            marker=dict(size=6.0, symbol="circle", color="royalblue", line=dict(width=1.0, color="white")),
-            name="Dynamic Obstacles"
-        ))
-        
-    # 4. Drone Paths, Starts, Checkpoints, and Goals
-    for i in range(N_DRONES):
-        pts = np.array(drone_paths[i])
-        col = DRONE_COLORS[i]
-        
+            marker=dict(size=5.0, symbol="circle", color="royalblue", line=dict(width=0.8, color="white")),
+            name="3D Dynamic Obstacles",
+            showlegend=False
+        ), row=1, col=2)
+    else:
         fig3d.add_trace(go.Scatter3d(
-            x=pts[:, 0], y=pts[:, 1], z=pts[:, 2],
-            mode="lines",
-            line=dict(color=col, width=4.5),
-            name=f"Drone {i} Path"
-        ))
+            x=[], y=[], z=[],
+            mode="markers",
+            marker=dict(size=5.0, symbol="circle", color="royalblue", line=dict(width=0.8, color="white")),
+            name="3D Dynamic Obstacles",
+            showlegend=False
+        ), row=1, col=2)
         
+    # Drone Traces in 3D
+    for i in range(N_DRONES):
+        col = DRONE_COLORS[i]
+        path_init = np.array(f0["drone_paths"][i])
+        pos_init = f0["positions"][i]
+        wpt_init = f0["active_wpt"][i]
+        
+        # 3D Path trace (30 + 5*i)
+        fig3d.add_trace(go.Scatter3d(
+            x=path_init[:, 0] if len(path_init) > 0 else [pos_init[0]],
+            y=path_init[:, 1] if len(path_init) > 0 else [pos_init[1]],
+            z=path_init[:, 2] if len(path_init) > 0 else [pos_init[2]],
+            mode="lines",
+            line=dict(color=col, width=3.5),
+            name=f"D{i} Path 3D",
+            legendgroup=f"drone_{i}",
+            showlegend=False
+        ), row=1, col=2)
+        
+        # 3D Start Pad (31 + 5*i)
         start_pos = start_positions[i]
         sx_idx = int(np.clip(start_pos[0], 0, 99))
         sy_idx = int(np.clip(start_pos[1], 0, 99))
-        start_ground_z = float(env.terrain[sx_idx, sy_idx])
-        
+        sz = float(env.terrain[sx_idx, sy_idx])
         fig3d.add_trace(go.Scatter3d(
-            x=[start_pos[0]], y=[start_pos[1]], z=[start_ground_z],
+            x=[start_pos[0]], y=[start_pos[1]], z=[sz],
             mode="markers+text",
-            marker=dict(size=13, symbol="square", color="cyan", line=dict(width=1.5, color="white")),
-            text=f"START {i}",
+            marker=dict(size=10, symbol="square", color="cyan", line=dict(width=1, color="white")),
+            text=f"S{i}",
             textposition="top center",
-            textfont=dict(size=8.5, color="cyan"),
-            name=f"Start Pad {i}",
+            textfont=dict(size=8, color="cyan"),
+            name=f"D{i} Start 3D",
             legendgroup=f"drone_{i}",
-            showlegend=True if i == 0 else False
-        ))
+            showlegend=False
+        ), row=1, col=2)
         
-        wpts_3d = waypoints[i]
-        fig3d.add_trace(go.Scatter3d(
-            x=wpts_3d[:, 0], y=wpts_3d[:, 1], z=wpts_3d[:, 2],
-            mode="markers",
-            marker=dict(size=5.5, symbol="circle", color=col, line=dict(width=1.2, color="white")),
-            name=f"Drone {i} Checkpoints",
-            legendgroup=f"drone_{i}",
-            showlegend=True if i == 0 else False
-        ))
-        
+        # 3D Goal Pad (32 + 5*i)
         goal_pos = goal_positions[i]
         gx_idx = int(np.clip(goal_pos[0], 0, 99))
         gy_idx = int(np.clip(goal_pos[1], 0, 99))
-        goal_ground_z = float(env.terrain[gx_idx, gy_idx])
-        
+        gz = float(env.terrain[gx_idx, gy_idx])
         fig3d.add_trace(go.Scatter3d(
-            x=[goal_pos[0]], y=[goal_pos[1]], z=[goal_ground_z],
+            x=[goal_pos[0]], y=[goal_pos[1]], z=[gz],
             mode="markers+text",
-            marker=dict(size=10, symbol="diamond", color=col, line=dict(width=1.2, color="white")),
-            text=f"GOAL {i}",
+            marker=dict(size=8, symbol="diamond", color=col, line=dict(width=1, color="white")),
+            text=f"G{i}",
             textposition="top center",
-            textfont=dict(size=8.5, color=col),
-            name=f"Goal Pad {i}",
+            textfont=dict(size=8, color=col),
+            name=f"D{i} Goal 3D",
             legendgroup=f"drone_{i}",
-            showlegend=True if i == 0 else False
+            showlegend=False
+        ), row=1, col=2)
+        
+        # 3D Position trace (33 + 5*i)
+        fig3d.add_trace(go.Scatter3d(
+            x=[pos_init[0]], y=[pos_init[1]], z=[pos_init[2]],
+            mode="markers",
+            marker=dict(size=8, symbol="circle", color=col, line=dict(width=0.8, color="white")),
+            name=f"D{i} Pos 3D",
+            legendgroup=f"drone_{i}",
+            showlegend=False
+        ), row=1, col=2)
+        
+        # 3D Waypoint trace (34 + 5*i)
+        fig3d.add_trace(go.Scatter3d(
+            x=[wpt_init[0]], y=[wpt_init[1]], z=[wpt_init[2]],
+            mode="markers",
+            marker=dict(size=6, symbol="x", color=col, line=dict(width=1.2)),
+            name=f"D{i} Target 3D",
+            legendgroup=f"drone_{i}",
+            showlegend=False
+        ), row=1, col=2)
+        
+    # ── CONSTRUCT ANIMATION FRAMES ───────────────────────────────────────────
+    plotly_animation_frames = []
+    
+    # Active trace indices list (matching the order of frame updates)
+    active_indices = [3, 4]
+    for i in range(N_DRONES):
+        active_indices.extend([5 + 3*i, 6 + 3*i, 7 + 3*i])
+    active_indices.extend([24, 29])
+    for i in range(N_DRONES):
+        active_indices.extend([30 + 5*i, 33 + 5*i, 34 + 5*i])
+        
+    for fd in plotly_frames:
+        step_val = fd["step"]
+        cov_grid_val = fd["coverage"]
+        dyn_pos_val = np.array(fd["dyn_pos"]) if fd["dyn_pos"] else np.empty((0, 3))
+        positions_val = fd["positions"]
+        drone_paths_val = fd["drone_paths"]
+        active_wpt_val = fd["active_wpt"]
+        
+        frame_data = []
+        
+        # 1. 2D Coverage Heatmap (Trace 3)
+        cov_2d_z = cov_grid_val.astype(float).copy()
+        cov_2d_z[obs_mask_2d] = np.nan
+        frame_data.append(go.Heatmap(z=cov_2d_z.T))
+        
+        # 2. 2D Dynamic Obstacles (Trace 4)
+        if len(dyn_pos_val) > 0:
+            frame_data.append(go.Scatter(x=dyn_pos_val[:, 0], y=dyn_pos_val[:, 1]))
+        else:
+            frame_data.append(go.Scatter(x=[], y=[]))
+            
+        # 3. 2D Drones
+        for i in range(N_DRONES):
+            pts_2d = np.array(drone_paths_val[i])
+            pos_val = positions_val[i]
+            wpt_val = active_wpt_val[i]
+            
+            frame_data.append(go.Scatter(x=pts_2d[:, 0], y=pts_2d[:, 1]))
+            frame_data.append(go.Scatter(x=[pos_val[0]], y=[pos_val[1]]))
+            frame_data.append(go.Scatter(x=[wpt_val[0]], y=[wpt_val[1]]))
+            
+        # 4. 3D Coverage Heatmap Surface (Trace 24)
+        cov_3d_z = env.terrain.T.copy()
+        cov_3d_z[~cov_grid_val.T] = np.nan
+        cov_3d_z[obs_mask_2d.T] = np.nan
+        frame_data.append(go.Surface(z=cov_3d_z + 0.1))
+        
+        # 5. 3D Dynamic Obstacles (Trace 29)
+        if len(dyn_pos_val) > 0:
+            frame_data.append(go.Scatter3d(x=dyn_pos_val[:, 0], y=dyn_pos_val[:, 1], z=dyn_pos_val[:, 2]))
+        else:
+            frame_data.append(go.Scatter3d(x=[], y=[], z=[]))
+            
+        # 6. 3D Drones
+        for i in range(N_DRONES):
+            pts_3d = np.array(drone_paths_val[i])
+            pos_val = positions_val[i]
+            wpt_val = active_wpt_val[i]
+            
+            frame_data.append(go.Scatter3d(x=pts_3d[:, 0], y=pts_3d[:, 1], z=pts_3d[:, 2]))
+            frame_data.append(go.Scatter3d(x=[pos_val[0]], y=[pos_val[1]], z=[pos_val[2]]))
+            frame_data.append(go.Scatter3d(x=[wpt_val[0]], y=[wpt_val[1]], z=[wpt_val[2]]))
+            
+        plotly_animation_frames.append(go.Frame(
+            data=frame_data,
+            name=f"frame_{step_val}",
+            traces=active_indices
         ))
+        
+    fig3d.frames = plotly_animation_frames
+    
+    # ── CONTROLS (Buttons and Slider) ────────────────────────────────────────
+    updatemenus = [dict(
+        type="buttons",
+        showactive=False,
+        direction="left",
+        x=0.08, y=0.0,
+        xanchor="right", yanchor="top",
+        pad=dict(t=25, r=10),
+        buttons=[
+            dict(
+                label="Play",
+                method="animate",
+                args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True, transition=dict(duration=0))]
+            ),
+            dict(
+                label="Pause",
+                method="animate",
+                args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate", transition=dict(duration=0))]
+            )
+        ]
+    )]
+    
+    sliders = [dict(
+        active=0,
+        steps=[],
+        x=0.09, y=0.0,
+        len=0.91,
+        xanchor="left", yanchor="top",
+        pad=dict(t=25, l=10),
+        currentvalue=dict(visible=True, prefix="Mission Step: ", xanchor="right", font=dict(size=12, color="white")),
+        transition=dict(duration=0)
+    )]
+    
+    for f in plotly_frames:
+        step_val = f["step"]
+        slider_step = dict(
+            args=[[f"frame_{step_val}"], dict(frame=dict(duration=0, redraw=True), mode="immediate", transition=dict(duration=0))],
+            label=str(step_val),
+            method="animate"
+        )
+        sliders[0]["steps"].append(slider_step)
         
     fig3d.update_layout(
         title=dict(
-            text="<b>Multi-Drone Autonomous Coverage — Interactive 3D Flight Log</b>",
-            x=0.5, y=0.95,
+            text="<b>Multi-Drone Autonomous Coverage — Synchronized 2D & 3D Interactive Web Dashboard</b>",
+            x=0.5, y=0.97,
             xanchor="center", yanchor="top",
             font=dict(size=18, color="white", family="Inter, Roboto, Arial")
         ),
@@ -836,20 +1188,26 @@ try:
             aspectmode="manual",
             aspectratio=dict(x=1, y=1, z=0.35)
         ),
-        margin=dict(l=0, r=0, b=0, t=50),
+        xaxis=dict(title="X (meters)", range=[0, 100], gridcolor="#2c2c4d", scaleanchor="y"),
+        yaxis=dict(title="Y (meters)", range=[0, 100], gridcolor="#2c2c4d"),
+        margin=dict(l=40, r=40, b=100, t=80),
+        updatemenus=updatemenus,
+        sliders=sliders,
         legend=dict(
-            x=0.02, y=0.98,
+            x=1.02, y=0.98,
             bgcolor="rgba(19, 19, 40, 0.85)",
             bordercolor="#3a3a6a",
             borderwidth=1,
-            font=dict(size=10)
+            font=dict(size=9)
         )
     )
     
     HTML_OUT = os.path.join(os.path.dirname(__file__), "models", "interactive_3d_view.html")
     fig3d.write_html(HTML_OUT, include_plotlyjs="cdn")
-    print(f"[DONE] Synchronized Interactive 3D HTML saved to {HTML_OUT}  ({os.path.getsize(HTML_OUT)/1024:.1f} KB)")
+    print(f"[DONE] Synchronized Interactive 2D/3D HTML saved to {HTML_OUT}  ({os.path.getsize(HTML_OUT)/1024:.1f} KB)")
 except Exception as e:
+    import traceback
     print(f"[WARN] Failed to write interactive 3D twin: {e}")
+    traceback.print_exc()
 
 print("\n[DONE] All results complete.")

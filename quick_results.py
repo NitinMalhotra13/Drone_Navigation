@@ -36,8 +36,8 @@ FA_WP_FILE     = os.path.join(os.path.dirname(__file__), "dataset", "fa_waypoint
 VIDEO_OUT      = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.gif")
 MP4_OUT        = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.mp4")
 FRAME_SKIP     = 5            # capture every 5th frame for smooth video
-FPS            = 10           # slower playback for easier human tracking
-VIDEO_DPI      = 90           # optimized DPI for fast render
+FPS            = 6            # slower playback (slower flight tracker)
+VIDEO_DPI      = 150          # higher DPI for crystal-clear, high-resolution video
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 def waypoint_action(positions, waypoints, return_waypoints, return_mode, wp_idx, max_speed, n_drones):
@@ -399,8 +399,8 @@ ax_map_3d.grid(True, color="#2c2c4d")
 
 # 3D terrain surface
 ax_map_3d.plot_surface(X_t, Y_t, env.terrain.T, rstride=4, cstride=4, cmap="terrain", alpha=0.3, zorder=1)
-# 3D contours
-ax_map_3d.contour(X_t, Y_t, env.terrain.T, levels=8, zdir='z', offset=0, colors=["#4b92db"], linewidths=1.0, alpha=0.6, zorder=2)
+# 3D contours — thicker lines for clearer visibility
+ax_map_3d.contour(X_t, Y_t, env.terrain.T, levels=8, zdir='z', offset=0, colors=["#4b92db"], linewidths=1.5, alpha=0.6, zorder=2)
 
 # ── Static obstacles as SCATTER MARKERS (large, clearly visible) ───────────
 # Extract obstacle cell positions from the 3D static grid (specifically at flight cruise altitude)
@@ -410,9 +410,9 @@ obs_coords = np.argwhere(obs_2d)  # (N, 2) array of [x, y] obstacle positions
 
 if len(obs_coords) > 0:
     ox, oy = obs_coords[:, 0], obs_coords[:, 1]
-    # Draw 2D obstacles
-    ax_map.scatter(ox, oy, s=18, marker="s", c="#8B4513",
-                   edgecolors="#5a2d0c", linewidths=0.3,
+    # Draw 2D obstacles — larger squares for better resolution clarity
+    ax_map.scatter(ox, oy, s=25, marker="s", c="#8B4513",
+                   edgecolors="#5a2d0c", linewidths=0.4,
                    alpha=0.85, zorder=5, label=f"Static Obstacles ({len(obs_coords)})")
     print(f"[VIDEO] Drawing {len(obs_coords)} static obstacle cells as scatter markers")
 else:
@@ -455,13 +455,13 @@ for x in range(tx):
                     rocks_y.append(y + 0.5)
                     rocks_z.append(z_val + 0.5)
 
-# Render static obstacles in 3D
+# Render static obstacles in 3D — enlarged for better clarity in the video
 if len(tree_trunks_x) > 0:
-    ax_map_3d.scatter(tree_trunks_x, tree_trunks_y, tree_trunks_z, s=4, c="#5a3d28", marker="s", alpha=0.9, depthshade=True, zorder=3)
+    ax_map_3d.scatter(tree_trunks_x, tree_trunks_y, tree_trunks_z, s=6, c="#5a3d28", marker="s", alpha=0.9, depthshade=True, zorder=3)
 if len(tree_leaves_x) > 0:
-    ax_map_3d.scatter(tree_leaves_x, tree_leaves_y, tree_leaves_z, s=15, c="#2e8b57", marker="o", alpha=0.6, depthshade=True, zorder=4)
+    ax_map_3d.scatter(tree_leaves_x, tree_leaves_y, tree_leaves_z, s=22, c="#2e8b57", marker="o", alpha=0.6, depthshade=True, zorder=4)
 if len(rocks_x) > 0:
-    ax_map_3d.scatter(rocks_x, rocks_y, rocks_z, s=6, c="#696969", marker="d", alpha=0.8, depthshade=True, zorder=3)
+    ax_map_3d.scatter(rocks_x, rocks_y, rocks_z, s=10, c="#696969", marker="d", alpha=0.8, depthshade=True, zorder=3)
 
 # Draw Important Home & Landing Zones (2D circles)
 ax_map.add_patch(mpatches.Circle((5, 5), 10, fill=False, edgecolor="cyan", linestyle="--", linewidth=1.2, hatch="//", alpha=0.5, zorder=4))
@@ -474,21 +474,21 @@ for rx, ry in rs_xy:
     ax_map.text(rx, ry + 2.5, "R", color="magenta", fontsize=7,
                 ha="center", va="bottom", fontweight="bold")
 
-# Recharge stations in 3D
+# Recharge stations in 3D — larger crosses for readability
 rs_z = []
 for rx, ry in rs_xy:
     rx_idx = int(np.clip(rx, 0, 99))
     ry_idx = int(np.clip(ry, 0, 99))
     rs_z.append(float(env.terrain[rx_idx, ry_idx]) + 0.15)
-ax_map_3d.scatter(rs_xy[:, 0], rs_xy[:, 1], rs_z, s=80, c="magenta", marker="X", depthshade=True, zorder=5)
+ax_map_3d.scatter(rs_xy[:, 0], rs_xy[:, 1], rs_z, s=110, c="magenta", marker="X", depthshade=True, zorder=5)
 
-# 3D Goals
+# 3D Goals — enlarged stars
 for i in range(N_DRONES):
     goal = goal_positions[i]
     gx_idx = int(np.clip(goal[0], 0, 99))
     gy_idx = int(np.clip(goal[1], 0, 99))
     gz = float(env.terrain[gx_idx, gy_idx])
-    ax_map_3d.scatter([goal[0]], [goal[1]], [gz], s=90, c=DRONE_COLORS[i], marker="*", alpha=0.9, zorder=5)
+    ax_map_3d.scatter([goal[0]], [goal[1]], [gz], s=120, c=DRONE_COLORS[i], marker="*", alpha=0.9, zorder=5)
 
 # Legend
 from matplotlib.lines import Line2D
@@ -511,13 +511,13 @@ im_cov = ax_map.imshow(init_cov, origin="lower", cmap="YlGn",
                        vmin=0, vmax=1, alpha=0.55,
                        extent=[0, 100, 0, 100], aspect="auto", zorder=2)
 
-sc_dyn = ax_map.scatter([], [], s=50, c="royalblue",
-                        alpha=0.75, edgecolors="white", linewidths=0.4,
+sc_dyn = ax_map.scatter([], [], s=70, c="royalblue",
+                        alpha=0.75, edgecolors="white", linewidths=0.5,
                         zorder=4, marker="o")
 
 # ── 3D Map Panel (Initialize DYNAMIC Artists) ──────────────────────────────
-sc_dyn_3d = ax_map_3d.scatter([], [], [], s=25, c="royalblue",
-                            alpha=0.75, edgecolors="white", linewidths=0.4, zorder=5)
+sc_dyn_3d = ax_map_3d.scatter([], [], [], s=45, c="royalblue",
+                            alpha=0.75, edgecolors="white", linewidths=0.5, zorder=5)
 
 # Create arrays of per-drone path lines, dot markers, waypoints, and labels
 line_paths = []
@@ -535,40 +535,40 @@ line_wpts_3d  = []
 
 for i in range(N_DRONES):
     col = DRONE_COLORS[i]
-    # 2D Trajectory path line
-    lp, = ax_map.plot([], [], color=col, linewidth=1.1, alpha=0.55, zorder=3)
+    # 2D Trajectory path line — thicker for clarity
+    lp, = ax_map.plot([], [], color=col, linewidth=1.5, alpha=0.55, zorder=3)
     line_paths.append(lp)
     
-    # 3D Trajectory path line
-    lp3d, = ax_map_3d.plot([], [], [], color=col, linewidth=1.5, alpha=0.6, zorder=4)
+    # 3D Trajectory path line — thicker for clarity
+    lp3d, = ax_map_3d.plot([], [], [], color=col, linewidth=2.5, alpha=0.6, zorder=4)
     line_paths_3d.append(lp3d)
     
     # Current 2D drone coordinate triangle marker
-    sd = ax_map.scatter([], [], s=100, c=col, edgecolors="white", linewidths=0.9, zorder=6, marker="^")
+    sd = ax_map.scatter([], [], s=140, c=col, edgecolors="white", linewidths=1.1, zorder=6, marker="^")
     sc_drones.append(sd)
     
     # Current 3D drone coordinate cone marker
-    sd3d = ax_map_3d.scatter([], [], [], s=60, c=col, edgecolors="white", linewidths=0.8, marker="^", zorder=6)
+    sd3d = ax_map_3d.scatter([], [], [], s=100, c=col, edgecolors="white", linewidths=1.0, marker="^", zorder=6)
     sc_drones_3d.append(sd3d)
     
     # Drone label text
-    td = ax_map.text(0, 0, f"D{i}", fontsize=6.5, color=col, fontweight="bold", zorder=7)
+    td = ax_map.text(0, 0, f"D{i}", fontsize=7.5, color=col, fontweight="bold", zorder=7)
     txt_drones.append(td)
     
     # Active 2D target marker
-    sw = ax_map.scatter([], [], s=45, marker="x", c=col, linewidths=1.3, alpha=0.8, zorder=5)
+    sw = ax_map.scatter([], [], s=70, marker="x", c=col, linewidths=1.5, alpha=0.8, zorder=5)
     sc_wpts.append(sw)
     
     # Active 3D target marker
-    sw3d = ax_map_3d.scatter([], [], [], s=30, marker="x", c=col, linewidths=1.1, alpha=0.8, zorder=5)
+    sw3d = ax_map_3d.scatter([], [], [], s=50, marker="x", c=col, linewidths=1.3, alpha=0.8, zorder=5)
     sc_wpts_3d.append(sw3d)
     
     # 2D guidance line
-    lw, = ax_map.plot([], [], color=col, linewidth=0.5, alpha=0.35, linestyle="--", zorder=4)
+    lw, = ax_map.plot([], [], color=col, linewidth=0.8, alpha=0.35, linestyle="--", zorder=4)
     line_wpts.append(lw)
     
     # 3D guidance line
-    lw3d, = ax_map_3d.plot([], [], [], color=col, linewidth=0.6, alpha=0.4, linestyle="--", zorder=4)
+    lw3d, = ax_map_3d.plot([], [], [], color=col, linewidth=1.0, alpha=0.4, linestyle="--", zorder=4)
     line_wpts_3d.append(lw3d)
     
     # Final unified goal star (2D)
@@ -652,6 +652,10 @@ def animate(fi):
     step_n = fd["step"]
     t_end  = min(step_n + 1, len(cov_hist))
     xs = list(range(t_end))
+
+    # Rotate 3D view camera azimuth slowly to show full terrain topography in video
+    azim = -45 + (fi / len(frames)) * 120
+    ax_map_3d.view_init(elev=28, azim=azim)
 
     # 1. Update Map Panel
     # Mask obstacle cells and uncovered cells to be fully transparent (NaN) so they don't cover background/terrain

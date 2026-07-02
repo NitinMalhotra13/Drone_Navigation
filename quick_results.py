@@ -115,16 +115,41 @@ fa.optimize(verbose=True)
 waypoints = fa.get_best_waypoints()
 np.save(FA_WP_FILE, waypoints)
 
-# PASS 2: return sweep planned by FA (no hand-coding, pure algorithmic fanning-out!)
-print(f"[FA] Planning return sweep waypoints ({FA_FIREFLIES} fireflies x {FA_ITERS} iters)...")
-fa_return = FireflyPlanner(
-    n_drones=N_DRONES, n_waypoints=20,
-    n_fireflies=FA_FIREFLIES, max_iter=FA_ITERS,
-    start_positions=goal_positions,     # starts at goal
-    goal_positions=start_positions       # returns to start
+# Helper to compute exact 2D coverage grid of forward sweeps for RRA input
+def get_waypoints_coverage_grid(wps_3d, sensor_radius=4.5):
+    grid = np.zeros((100, 100), dtype=bool)
+    r = int(math.ceil(sensor_radius))
+    ys, xs = np.ogrid[-r:r + 1, -r:r + 1]
+    disk = (xs ** 2 + ys ** 2) <= sensor_radius ** 2
+    n_drones, n_wps = wps_3d.shape[0], wps_3d.shape[1]
+    for d in range(n_drones):
+        for w in range(n_wps - 1):
+            p_start = wps_3d[d, w]
+            p_end = wps_3d[d, w + 1]
+            for step in range(15):
+                t = step / 14.0
+                pos = p_start + t * (p_end - p_start)
+                cx, cy = int(round(pos[0])), int(round(pos[1]))
+                x_lo = max(0, cx - r); x_hi = min(100, cx + r + 1)
+                y_lo = max(0, cy - r); y_hi = min(100, cy + r + 1)
+                dx_lo = x_lo - (cx - r); dx_hi = dx_lo + (x_hi - x_lo)
+                dy_lo = y_lo - (cy - r); dy_hi = dy_lo + (y_hi - y_lo)
+                grid[y_lo:y_hi, x_lo:x_hi] |= disk[dy_lo:dy_hi, dx_lo:dx_hi]
+    return grid
+
+# PASS 2: Return sweep planned by RRA (using simulated forward coverage grid to optimize returns!)
+print(f"[RRA] Planning return sweep waypoints using Raven Roosting Algorithm ({RA_RAVENS} ravens x {RA_ITERS} iters)...")
+forward_cov_grid = get_waypoints_coverage_grid(waypoints, sensor_radius=4.5)
+ra_return = RavenReplanner(
+    n_drones=N_DRONES, n_ravens=RA_RAVENS, max_iter=RA_ITERS,
+    grid_x=100, grid_y=100, cruise_z=6.0,
+    goal_positions=start_positions
 )
-fa_return.optimize(verbose=False)
-return_waypoints = fa_return.get_best_waypoints()
+return_waypoints = ra_return.replan(
+    current_positions=goal_positions,
+    coverage_grid=forward_cov_grid,
+    n_remaining_waypoints=20
+)
 
 stats = fa.get_coverage_stats()
 print(f"[FA] Done. Coverage est: {stats['coverage_ratio']*100:.1f}%  "
@@ -166,48 +191,10 @@ print("=" * 65)
 t0 = time.time()
 for step in range(N_STEPS):
 
-    # RRA replan at specific mid-flight milestones (step 450 and 950)
-    # This dynamically targets uncovered gaps using RRA, while keeping paths clean, smooth, and sweeping.
-    if step in [450, 950]:
-        if not return_mode.any():
-            print(f"\n  [RRA] Dynamic replanning of forward sweep at step {step}...")
-            print(f"        Shared Map Coverage: {env.coverage_ratio()*100:.2f}%")
-            try:
-                min_idx = int(wp_idx.min())
-                n_rem = waypoints.shape[1] - min_idx
-                if n_rem > 2:
-                    new_wp = ra.replan(
-                        current_positions=env.positions.copy(),
-                        coverage_grid=env.coverage_grid.copy(),
-                        n_remaining_waypoints=n_rem,
-                    )
-                    waypoints[:, min_idx:, :] = new_wp
-                    wp_idx = np.clip(wp_idx, 0, waypoints.shape[1] - 1)
-                    print("  [RRA] Forward sweep path optimized successfully.")
-            except Exception as e:
-                print(f"  [RRA] Forward replan error: {e}")
-        else:
-            print(f"\n  [RRA] Dynamic replanning of return sweep at step {step}...")
-            print(f"        Shared Map Coverage: {env.coverage_ratio()*100:.2f}%")
-            try:
-                min_idx = int(wp_idx.min())
-                n_rem = return_waypoints.shape[1] - min_idx
-                if n_rem > 2:
-                    # Plan return using RRA with start_positions as targets!
-                    ra_return = RavenReplanner(
-                        n_drones=N_DRONES, n_ravens=RA_RAVENS, max_iter=RA_ITERS,
-                        goal_positions=start_positions
-                    )
-                    new_wp = ra_return.replan(
-                        current_positions=env.positions.copy(),
-                        coverage_grid=env.coverage_grid.copy(),
-                        n_remaining_waypoints=n_rem,
-                    )
-                    return_waypoints[:, min_idx:, :] = new_wp
-                    wp_idx = np.clip(wp_idx, 0, return_waypoints.shape[1] - 1)
-                    print("  [RRA] Return sweep path optimized successfully.")
-            except Exception as e:
-                print(f"  [RRA] Return replan error: {e}")
+    # Mid-mission RRA replanning is disabled to prevent path scrambling/crossings (hotch-potch).
+    # Both forward and return sweeps are planned holistically at the start using FA & RRA respectively,
+    # ensuring smooth, parallel non-overlapping flight corridors throughout the entire flight.
+    pass
 
     action = waypoint_action(env.positions, waypoints, return_waypoints, return_mode, wp_idx,
                               env.max_speed, N_DRONES)
@@ -251,10 +238,10 @@ for step in range(N_STEPS):
             dist_to_wpt = np.linalg.norm(env.positions[i] - wpt)
             
             # Timeout or distance-based transition
-            # 5.0m radius → reliably reachable even with strong wind gusts
-            # 40-step timeout → 3× faster unsticking vs. previous 120-step window
-            if dist_to_wpt < 5.0 or wpt_steps[i] > 40:
-                if wpt_steps[i] > 40:
+            # 5.5m radius → reliably reachable at high speeds (1.2m/step cap)
+            # 25-step timeout → adapted to twice faster flight dynamics
+            if dist_to_wpt < 5.5 or wpt_steps[i] > 25:
+                if wpt_steps[i] > 25:
                     print(f"[SKIP] Drone {i} advancing past waypoint {idx} (dist={dist_to_wpt:.1f}m, {wpt_steps[i]} steps)")
                 
                 wpt_steps[i] = 0
@@ -403,8 +390,8 @@ ax_map_3d.plot_surface(X_t, Y_t, env.terrain.T, rstride=4, cstride=4, cmap="terr
 ax_map_3d.contour(X_t, Y_t, env.terrain.T, levels=8, zdir='z', offset=0, colors=["#4b92db"], linewidths=1.5, alpha=0.6, zorder=2)
 
 # ── Static obstacles as SCATTER MARKERS (large, clearly visible) ───────────
-# Extract obstacle cell positions from the 3D static grid (specifically at flight cruise altitude)
-obs_2d = env.static[:, :, 6]  # (100, 100) bool
+# Project all Z-levels of the static grid so that every tree, rock, or building is visible in 2D top-down map
+obs_2d = np.any(env.static, axis=2)  # (100, 100) bool
 obs_mask_2d = obs_2d  # kept for coverage masking in animate()
 obs_coords = np.argwhere(obs_2d)  # (N, 2) array of [x, y] obstacle positions
 

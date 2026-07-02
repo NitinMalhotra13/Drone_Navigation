@@ -157,10 +157,10 @@ class FireflyPlanner:
         for _ in range(self.n_fireflies):
             pop_element = np.empty((self.n_drones, self.n_waypoints - 2, 2))
             
-            # Spread search corridors across [-65, 65] for maximum grid edge reach
+            # Spread search corridors across [-45, 45] to fit inside boundaries without edge bunching
             for d in range(self.n_drones):
-                corridor_center = -65.0 + (130.0 * d / max(1, self.n_drones - 1))
-                pop_element[d, :, 0] = corridor_center + np.random.uniform(-5.0, 5.0, self.n_waypoints - 2)
+                corridor_center = -45.0 + (90.0 * d / max(1, self.n_drones - 1))
+                pop_element[d, :, 0] = corridor_center + np.random.uniform(-4.0, 4.0, self.n_waypoints - 2)
                 pop_element[d, :, 1] = np.random.uniform(-0.4, 0.4, self.n_waypoints - 2)
                 
             population.append(pop_element)
@@ -248,7 +248,8 @@ class FireflyPlanner:
         the FA to spread drones as widely as possible across the 100x100 grid.
         """
         cov, path_len, battery, overlap = self._simulate_coverage(firefly)
-        return cov * 150.0 - 20.0 * overlap - 0.02 * path_len - 0.05 * battery
+        # Heavily penalise overlap to force strictly parallel, non-overlapping search lanes
+        return cov * 150.0 - 150.0 * overlap - 0.02 * path_len - 0.05 * battery
 
     # ------------------------------------------------------------------
     # Optimisation loop
@@ -293,8 +294,8 @@ class FireflyPlanner:
                     
                     new_pos      = pos_i + attraction * diff + noise
 
-                    # Clip deviations to valid limits (±80 for full edge-to-edge reach)
-                    new_pos[..., 0] = np.clip(new_pos[..., 0], -80.0, 80.0)  # Max lateral deviation
+                    # Clip deviations to valid limits (±55 to prevent squashing/bunching at boundaries)
+                    new_pos[..., 0] = np.clip(new_pos[..., 0], -55.0, 55.0)  # Max lateral deviation
                     new_pos[..., 1] = np.clip(new_pos[..., 1], -0.5, 0.5)    # Vertical jitter
                     
                     population[i] = new_pos

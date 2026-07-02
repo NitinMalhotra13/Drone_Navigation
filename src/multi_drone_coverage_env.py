@@ -201,7 +201,7 @@ class MultiDroneCoverageEnv(gym.Env):
         n_drones: int          = 6,
         grid_size: tuple       = GRID_SIZE,
         safety_radius: float   = 1.8,
-        max_speed: float       = 0.9,
+        max_speed: float       = 1.8,
         battery_capacity: float= 200.0,
         battery_drain_base: float = 0.08,   # base drain per step
         max_steps: int         = 2000,
@@ -243,8 +243,8 @@ class MultiDroneCoverageEnv(gym.Env):
 
         # -- Flight phase constants (same as original Drone3DEnv) ----------
         self.CRUISE_Z            = CRUISE_Z
-        self.HORIZONTAL_STEP_CAP = 0.60
-        self.VERTICAL_CAP        = 0.30
+        self.HORIZONTAL_STEP_CAP = 1.20
+        self.VERTICAL_CAP        = 0.60
         self.VERTICAL_RANGE      = 1.20
         self.ASCENT_TOL          = 1e-6
         self.smooth_alpha        = 0.40

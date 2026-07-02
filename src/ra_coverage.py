@@ -174,7 +174,8 @@ class RavenReplanner:
     ) -> float:
         wps_3d = self.raven_to_waypoints(pop_element, current_positions)
         new_cells, path_len, overlap = self._simulate_new_coverage(wps_3d, coverage_grid)
-        return float(new_cells) - 25.0 * overlap - 0.05 * path_len
+        # Multiply overlap by 2500.0 to match the scale of cell count reward (grid max cells = 10000)
+        return float(new_cells) - 2500.0 * overlap - 0.05 * path_len
 
     # ------------------------------------------------------------------
     # Population initialisation
@@ -196,9 +197,9 @@ class RavenReplanner:
             pop_element = np.empty((self.n_drones, n_remaining_wps - 2, 2))
             
             for d in range(self.n_drones):
-                # Corridor bias spreads from negative to positive
-                corridor_center = -55.0 + (110.0 * d / max(1, self.n_drones - 1))
-                pop_element[d, :, 0] = corridor_center + np.random.uniform(-4.0, 4.0, n_remaining_wps - 2)
+                # Corridor bias spreads from negative to positive [-40, 40] to fit cleanly within boundaries
+                corridor_center = -40.0 + (80.0 * d / max(1, self.n_drones - 1))
+                pop_element[d, :, 0] = corridor_center + np.random.uniform(-3.0, 3.0, n_remaining_wps - 2)
                 pop_element[d, :, 1] = np.random.uniform(-0.4, 0.4, n_remaining_wps - 2)
                 
             population.append(pop_element)
@@ -265,8 +266,8 @@ class RavenReplanner:
                     noise[..., 1] *= 0.15  # damp vertical search noise
                     raven_i   += np.random.rand() * 0.8 * diff + noise
 
-                # Clip deviations
-                raven_i[..., 0] = np.clip(raven_i[..., 0], -65.0, 65.0)  # Max lateral deviation
+                # Clip deviations (±50 to prevent squashing/bunching at boundaries)
+                raven_i[..., 0] = np.clip(raven_i[..., 0], -50.0, 50.0)  # Max lateral deviation
                 raven_i[..., 1] = np.clip(raven_i[..., 1], -0.5, 0.5)    # Vertical jitter
 
                 population[i] = raven_i

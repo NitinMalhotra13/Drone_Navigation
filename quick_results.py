@@ -35,8 +35,8 @@ RA_ITERS       = 20
 FA_WP_FILE     = os.path.join(os.path.dirname(__file__), "dataset", "fa_waypoints.npy")
 VIDEO_OUT      = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.gif")
 MP4_OUT        = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.mp4")
-FRAME_SKIP     = 5            # capture every 5th frame for smooth video
-FPS            = 6            # slower playback (slower flight tracker)
+FRAME_SKIP     = 3            # capture every 3rd frame (higher frame rate for 29s video)
+FPS            = 7            # slower playback (slower flight tracker, 29-30s duration)
 VIDEO_DPI      = 150          # higher DPI for crystal-clear, high-resolution video
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -222,8 +222,8 @@ for step in range(N_STEPS):
                     wpt_area = env.coverage_grid[x_lo:x_hi, y_lo:y_hi]
                     coverage_pct = wpt_area.sum() / wpt_area.size
                     if coverage_pct > 0.85:
-                        if return_mode[i] and wp_idx[i] > 0:
-                            wp_idx[i] -= 1
+                        if return_mode[i] and wp_idx[i] < return_waypoints.shape[1] - 1:
+                            wp_idx[i] += 1
                             wpt_steps[i] = 0
                             continue
                 break
@@ -252,11 +252,11 @@ for step in range(N_STEPS):
                         # Forward sweep completed: initiate return home reverse sweep!
                         return_mode[i] = True
                         env.phases[i] = "return_home"
-                        wp_idx[i] = waypoints.shape[1] - 1
+                        wp_idx[i] = 0  # start return mode at index 0 (near the goal)
                         print(f"[INFO] Drone {i} sweep completed. Initiating fanned-out return sweep...")
                 else:
-                    if wp_idx[i] > 0:
-                        wp_idx[i] -= 1
+                    if wp_idx[i] < return_waypoints.shape[1] - 1:
+                        wp_idx[i] += 1  # follow return waypoints in ascending order from goal to start
                     else:
                         # Reverse return sweep completed: land safely!
                         env.phases[i] = "descend_land"
@@ -620,11 +620,38 @@ ax_bat.set_title("Per-Drone Battery & Motor Health", fontsize=9, color="white")
 ax_bat.axvline(20, color="#ff4455", linestyle="--", linewidth=0.8, alpha=0.6)
 ax_bat.axvline(50, color="#ffaa00", linestyle=":",  linewidth=0.7, alpha=0.5)
 
-# ── [1,1] Scorecard Panel (Initialize Artists) ─────────────────────────────
+# ── [1,1] Scorecard Panel (Initialize Matplotlib Table) ─────────────────────
 ax_stat.axis("off")
-txt_scorecard = ax_stat.text(0.05, 0.95, "", transform=ax_stat.transAxes,
-                             fontsize=9.0, color="white", va="top", fontfamily="monospace")
-ax_stat.set_title("System Status", fontsize=9, color="white")
+cell_text = [
+    ["Area Coverage", "0.00 %"],
+    ["Total Collisions", "0"],
+    ["Distance Travelled", "0.0 m"],
+    ["Battery Drained", "0.0 u"],
+    ["Steps Completed", "0"]
+]
+# Create table on ax_stat
+table_stat = ax_stat.table(
+    cellText=cell_text,
+    colLabels=["Metric", "Current Value"],
+    loc="center",
+    cellLoc="center"
+)
+table_stat.auto_set_font_size(False)
+table_stat.set_fontsize(8.5)
+table_stat.scale(1.0, 1.8) # scale height for elegant vertical cell padding
+
+# Style cells in a beautiful dark theme
+for (row, col), cell in table_stat.get_celld().items():
+    cell.set_edgecolor("#2c2c4d")
+    if row == 0:
+        cell.set_facecolor("#1a1a3b")
+        cell.get_text().set_color("#00ffcc")
+        cell.get_text().set_weight("bold")
+    else:
+        cell.set_facecolor("#111128")
+        cell.get_text().set_color("white")
+
+ax_stat.set_title("Live Mission Scorecard", fontsize=9, color="white")
 
 # Legend once outside
 lines1, lbl1 = ax_met.get_legend_handles_labels()
@@ -715,26 +742,12 @@ def animate(fi):
         fontsize=7.5, color="white"
     )
 
-    # 4. Update Scorecard Panel
-    scorecard_str = f"""LIVE SCORECARD
---------------
-Coverage    :  {fd['cov_pct']:.2f} %
-Grid Cells  :  {int(fd['cov_pct']/100*10000):,} / 10,000
-
-[OBJ 1] Collisions   :  {fd['collisions']}
-[OBJ 2] Path Length  :  {fd['path_len']:.1f} m
-[OBJ 3] Battery Used :  {fd['bat_used']:.0f} units
-
-Wind Speed  :  {fd['wind']:.4f} m/step
-Step        :  {fd['step']} / {N_STEPS}
-
-ALGORITHMS
-----------
-  FA  - Firefly (global planner)
-  RA  - Raven Roosting (replan)
-  PPO - Waypoint controller
-"""
-    txt_scorecard.set_text(scorecard_str)
+    # 4. Update Scorecard Panel Table in-place
+    table_stat[1, 1].get_text().set_text(f"{fd['cov_pct']:.2f} %")
+    table_stat[2, 1].get_text().set_text(f"{fd['collisions']}")
+    table_stat[3, 1].get_text().set_text(f"{fd['path_len']:.1f} m")
+    table_stat[4, 1].get_text().set_text(f"{fd['bat_used']:.0f} u")
+    table_stat[5, 1].get_text().set_text(f"{fd['step']}")
 
     # No return needed — blit=False redraws everything each frame
 

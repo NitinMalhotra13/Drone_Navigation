@@ -175,7 +175,7 @@ class RavenReplanner:
         wps_3d = self.raven_to_waypoints(pop_element, current_positions)
         new_cells, path_len, overlap = self._simulate_new_coverage(wps_3d, coverage_grid)
         # Multiply overlap by 2500.0 to match the scale of cell count reward (grid max cells = 10000)
-        return float(new_cells) - 2500.0 * overlap - 0.05 * path_len
+        return float(new_cells) - 2500.0 * overlap - 0.12 * path_len
 
     # ------------------------------------------------------------------
     # Population initialisation

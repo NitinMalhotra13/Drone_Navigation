@@ -242,15 +242,9 @@ class FireflyPlanner:
     # Fitness
     # ------------------------------------------------------------------
     def _fitness(self, firefly: np.ndarray) -> float:
-        """
-        Multi-objective scalar fitness prioritising maximum area coverage.
-        Coverage reward weight raised (150) vs overlap penalty (20) to push
-        the FA to spread drones as widely as possible across the 100x100 grid.
-        """
         cov, path_len, battery, overlap = self._simulate_coverage(firefly)
-        # Heavily penalise overlap to force strictly parallel, non-overlapping search lanes
-        return cov * 150.0 - 150.0 * overlap - 0.02 * path_len - 0.05 * battery
-
+        # Heavily penalise overlap to force parallel lanes, and penalise path/battery to keep it short & efficient
+        return cov * 150.0 - 150.0 * overlap - 0.06 * path_len - 0.12 * battery
     # ------------------------------------------------------------------
     # Optimisation loop
     # ------------------------------------------------------------------

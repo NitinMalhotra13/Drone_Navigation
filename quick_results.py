@@ -313,6 +313,37 @@ for step in range(N_STEPS):
         break
 
 elapsed_total = time.time() - t0
+
+# Pad the end with 25 stationary frames showing the drones landed and stopped on the ground
+if len(frames) > 0:
+    last_frame = frames[-1]
+    # Create padded copies
+    for _ in range(25):
+        padded_frame = {
+            "step":         last_frame["step"],
+            "positions":    last_frame["positions"].copy(),
+            "coverage":     last_frame["coverage"].copy(),
+            "batteries":    list(last_frame["batteries"]),
+            "phases":       ["landed"] * N_DRONES,  # Show phase as LANDED
+            "motor_health": list(last_frame["motor_health"]),
+            "dyn_pos":      [p.copy() for p in last_frame["dyn_pos"]],
+            "cov_pct":      last_frame["cov_pct"],
+            "collisions":   last_frame["collisions"],
+            "path_len":     last_frame["path_len"],
+            "bat_used":     last_frame["bat_used"],
+            "wind":         last_frame["wind"],
+            "drone_paths":  [list(path) for path in last_frame["drone_paths"]],
+            "wp_idx":       last_frame["wp_idx"].copy(),
+            "waypoints":    last_frame["waypoints"].copy(),
+            "active_wpt":   last_frame["active_wpt"].copy(),
+        }
+        # Force Z coordinates to land exactly on the ground terrain height!
+        for i in range(N_DRONES):
+            sx = int(np.clip(padded_frame["positions"][i, 0], 0, env.GX - 1))
+            sy = int(np.clip(padded_frame["positions"][i, 1], 0, env.GY - 1))
+            padded_frame["positions"][i, 2] = float(env.terrain[sx, sy])
+        frames.append(padded_frame)
+
 final = frames[-1]
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -344,12 +375,12 @@ fig.suptitle("Multi-Drone Coverage  |  FA + RA + PPO  |  6 Drones  |  100x100 Gr
 gs      = GridSpec(2, 3, figure=fig, hspace=0.40, wspace=0.30,
                    left=0.05, right=0.98, top=0.92, bottom=0.06)
 ax_map  = fig.add_subplot(gs[0, 0])
-ax_map_3d = fig.add_subplot(gs[0, 1], projection='3d')
-ax_met  = fig.add_subplot(gs[0, 2])
+# Make 3D map span columns 1 and 2 to make it significantly larger
+ax_map_3d = fig.add_subplot(gs[0, 1:], projection='3d')
 ax_bat  = fig.add_subplot(gs[1, 0])
 ax_stat = fig.add_subplot(gs[1, 1:])
 
-for ax in [ax_map, ax_met, ax_bat, ax_stat]:
+for ax in [ax_map, ax_bat, ax_stat]:
     ax.set_facecolor("#131328")
     for spine in ax.spines.values():
         spine.set_color("#3a3a6a")
@@ -577,26 +608,7 @@ ax_map_3d.set_title("3D Map View", fontsize=9, color="white")
 ax_map_3d.view_init(elev=28, azim=-45)
 
 
-# ── [0,1] Metrics Panel (Initialize Artists) ──────────────────────────────
-line_cov, = ax_met.plot([], [], color="#00ff88", linewidth=1.5, label="Coverage %")
-ax_met.set_ylabel("Coverage %", color="#00ff88", fontsize=8)
-ax_met.tick_params(axis="y", labelcolor="#00ff88", colors="#aaaacc")
-ax_met.set_ylim(0, 105)
-
-ax2 = ax_met.twinx()
-ax2.set_facecolor("#131328")
-for sp in ax2.spines.values():
-    sp.set_color("#3a3a6a")
-ax2.tick_params(axis="y", labelcolor="white", colors="#aaaacc")
-ax2.set_ylim(0, 115)
-
-line_col, = ax2.plot([], [], color="#ff4455", linewidth=1.1, linestyle="--", label="Collisions (norm)")
-line_bat, = ax2.plot([], [], color="#ffaa00", linewidth=1.0, linestyle=":",  label="Battery (norm)")
-line_path, = ax2.plot([], [], color="#44ccff", linewidth=1.0, linestyle="-.", label="Path (norm)")
-
-ax_met.set_xlabel("Step", fontsize=8)
-ax_met.set_title("Multi-Objective Metrics  (Obj1: Collision | Obj2: Path | Obj3: Battery)",
-                 fontsize=8.5, color="white")
+# Metrics Panel is removed to allow a much larger and clearer 3D map panel
 
 # ── [1,0] Battery Panel (Initialize Artists) ───────────────────────────────
 bar_rects = []
@@ -653,12 +665,7 @@ for (row, col), cell in table_stat.get_celld().items():
 
 ax_stat.set_title("Live Mission Scorecard", fontsize=9, color="white")
 
-# Legend once outside
-lines1, lbl1 = ax_met.get_legend_handles_labels()
-lines2, lbl2 = ax2.get_legend_handles_labels()
-ax_met.legend(lines1 + lines2, lbl1 + lbl2, loc="upper left",
-              fontsize=6.5, facecolor="#1a1a35",
-              labelcolor="white", framealpha=0.8)
+# Metrics Legend removed
 
 # ── ANIMATION UPDATE LOOP (artist-in-place) ────────────────────────────────
 def animate(fi):
@@ -714,17 +721,8 @@ def animate(fi):
         fontsize=9, color="white"
     )
 
-    # 2. Update Metrics Panel
-    line_cov.set_data(xs, cov_hist[:t_end])
-    max_col  = max(col_hist[-1],  1)
-    max_bat  = max(bat_hist[-1],  1)
-    max_path = max(path_hist[-1], 1)
-    line_col.set_data(xs, [c / max_col * 100  for c in col_hist[:t_end]])
-    line_bat.set_data(xs, [b / max_bat * 100  for b in bat_hist[:t_end]])
-    line_path.set_data(xs, [p / max_path * 100 for p in path_hist[:t_end]])
-
-    ax_met.set_xlim(0, max(N_STEPS, t_end))
-    ax2.set_xlim(0, max(N_STEPS, t_end))
+    # 2. Update Metrics Panel (removed to prioritize larger 3D panel)
+    pass
 
     # 3. Update Battery Panel
     bats = fd["batteries"]

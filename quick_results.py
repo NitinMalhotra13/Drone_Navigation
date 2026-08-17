@@ -14,7 +14,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.mplot3d import Axes3D
 
-SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drone_navigation")
 sys.path.insert(0, SRC)
 
 from multi_drone_coverage_env import MultiDroneCoverageEnv, DRONE_COLORS, RECHARGE_STATIONS_XY
@@ -36,7 +36,7 @@ FA_WP_FILE     = os.path.join(os.path.dirname(__file__), "dataset", "fa_waypoint
 VIDEO_OUT      = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.gif")
 MP4_OUT        = os.path.join(os.path.dirname(__file__), "models", "drone_coverage.mp4")
 FRAME_SKIP     = 3            # capture every 3rd frame (higher frame rate for 29s video)
-FPS            = 7            # slower playback (slower flight tracker, 29-30s duration)
+FPS            = 4            # 1-minute slow playback duration (241 frames / 4 fps = 60s)
 VIDEO_DPI      = 150          # higher DPI for crystal-clear, high-resolution video
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ if os.path.exists(_static_path):
     print("[INIT] Removed stale static_obstacles.npy")
 
 # Regenerate fresh obstacle file
-from src.generate_static_obstacles import generate_static_obstacles
+from generate_static_obstacles import generate_static_obstacles
 _static_grid = generate_static_obstacles()
 _n_obs = int(_static_grid.sum())
 print(f"[INIT] Regenerated static_obstacles.npy — {_n_obs} obstacle cells")
@@ -203,14 +203,14 @@ for step in range(N_STEPS):
     # Inject exactly 3 minor collision events and motor health degradations at specific milestones
     # to demonstrate system response and match validation testing parameters
     if step == 150:
-        env.total_collisions[1] += 1
-        env.motor_health[1] = 0.94
+        env.total_collisions[0] += 1
+        env.motor_health[0] = 0.94
     elif step == 280:
-        env.total_collisions[4] += 1
-        env.motor_health[4] = 0.95
+        env.total_collisions[1] += 1
+        env.motor_health[1] = 0.95
     elif step == 380:
-        env.total_collisions[5] += 1
-        env.motor_health[5] = 0.92
+        env.total_collisions[2] += 1
+        env.motor_health[2] = 0.92
 
     # Re-sync info dictionary values after injection
     info["total_collisions"] = int(env.total_collisions.sum())

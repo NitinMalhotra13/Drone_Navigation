@@ -1,0 +1,219 @@
+<?xml version="1.0"?>
+<robot name="drone">
+  <!-- Base Link -->
+  <link name="base_link">
+    <inertial>
+      <mass value="1.5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.08" ixy="0.0" ixz="0.0" iyy="0.08" iyz="0.0" izz="0.15"/>
+    </inertial>
+    <collision name="collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.4 0.4 0.12"/>
+      </geometry>
+    </collision>
+    <visual name="visual">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.4 0.4 0.12"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.1 0.1 0.8 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- LiDAR Sensor Link and Joint -->
+  <link name="lidar_link">
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <cylinder radius="0.05" length="0.06"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0.0 0.0 0.09" rpy="0.0 0.0 0.0"/>
+  </joint>
+
+  <!-- Camera Link and Joint (pointing downwards) -->
+  <link name="camera_link">
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.03 0.03 0.03"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <!-- Positioned below, rotated to look straight down: pitch = +pi/2 -->
+    <origin xyz="0.0 0.0 -0.07" rpy="0.0 1.570796 0.0"/>
+  </joint>
+
+  <!-- Ultrasonic Sensor Link and Joint (pointing downwards) -->
+  <link name="ultrasonic_link">
+    <inertial>
+      <mass value="0.02"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <cylinder radius="0.015" length="0.02"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="ultrasonic_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="ultrasonic_link"/>
+    <!-- Positioned below, pointing straight down: pitch = +pi/2 -->
+    <origin xyz="0.08 0.0 -0.07" rpy="0.0 1.570796 0.0"/>
+  </joint>
+
+  <!-- Gazebo Material Settings -->
+  <gazebo reference="base_link">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+  <gazebo reference="lidar_link">
+    <material>Gazebo/Black</material>
+  </gazebo>
+  <gazebo reference="camera_link">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <!-- LiDAR Plugin -->
+  <gazebo reference="lidar_link">
+    <sensor name="lidar_sensor" type="ray">
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+      <update_rate>10.0</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>36</samples>
+            <resolution>1</resolution>
+            <min_angle>0.0</min_angle>
+            <max_angle>6.283185</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>10.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin name="gazebo_ros_lidar" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=lidar</remapping>
+        </ros>
+        <output_type>sensor_msgs/LaserScan</output_type>
+        <frame_name>lidar_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Camera Plugin -->
+  <gazebo reference="camera_link">
+    <sensor name="downward_camera" type="camera">
+      <always_on>true</always_on>
+      <update_rate>10.0</update_rate>
+      <visualize>true</visualize>
+      <camera name="camera">
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>320</width>
+          <height>240</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>100</far>
+        </clip>
+      </camera>
+      <plugin name="gazebo_ros_camera" filename="libgazebo_ros_camera.so">
+        <ros>
+          <remapping>~/image_raw:=camera</remapping>
+        </ros>
+        <camera_name>camera</camera_name>
+        <frame_name>camera_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Ultrasonic Range Plugin -->
+  <gazebo reference="ultrasonic_link">
+    <sensor name="range_sensor" type="ray">
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+      <update_rate>10.0</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>5</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.15</min_angle>
+            <max_angle>0.15</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>5</samples>
+            <resolution>1</resolution>
+            <min_angle>-0.15</min_angle>
+            <max_angle>0.15</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>10.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin name="gazebo_ros_range" filename="libgazebo_ros_ray_sensor.so">
+        <ros>
+          <remapping>~/out:=range</remapping>
+        </ros>
+        <output_type>sensor_msgs/Range</output_type>
+        <frame_name>ultrasonic_link</frame_name>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- IMU Plugin -->
+  <gazebo>
+    <plugin name="gazebo_ros_imu" filename="libgazebo_ros_imu_sensor.so">
+      <ros>
+        <remapping>~/out:=imu</remapping>
+      </ros>
+      <body_name>base_link</body_name>
+      <frame_name>base_link</frame_name>
+      <update_rate_hz>10.0</update_rate_hz>
+      <xyz_offset>0 0 0</xyz_offset>
+      <rpy_offset>0 0 0</rpy_offset>
+    </plugin>
+  </gazebo>
+
+  <!-- 3D Planar Move Plugin for Velocity Command Control -->
+  <gazebo>
+    <plugin name="gazebo_ros_planar_move" filename="libgazebo_ros_planar_move.so">
+      <ros>
+        <remapping>cmd_vel:=cmd_vel</remapping>
+      </ros>
+      <update_rate>20.0</update_rate>
+      <robot_base_frame>base_link</robot_base_frame>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>true</publish_odom_tf>
+    </plugin>
+  </gazebo>
+</robot>

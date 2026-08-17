@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.gridspec import GridSpec
 
-SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drone_navigation")
 sys.path.insert(0, SRC)
 from multi_drone_coverage_env import (
     MultiDroneCoverageEnv, DRONE_COLORS, RECHARGE_STATIONS_XY

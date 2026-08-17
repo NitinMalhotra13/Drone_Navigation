@@ -127,10 +127,14 @@ def generate_gazebo_assets():
     </model>"""
                     obstacle_id += 1
         
-        # Add 5 dynamic moving obstacles (red spheres with planar move plugin)
-        dynamic_starts = [
-            (20.0, 20.0), (40.0, 40.0), (60.0, 60.0), (80.0, 80.0), (30.0, 70.0)
-        ]
+        # Add 20 dynamic moving obstacles (red spheres with planar move plugin)
+        np.random.seed(42)
+        dynamic_starts = []
+        for _ in range(20):
+            dx = float(np.random.uniform(15.0, 90.0))
+            dy = float(np.random.uniform(15.0, 90.0))
+            dynamic_starts.append((dx, dy))
+            
         for i, (dx, dy) in enumerate(dynamic_starts):
             static_obstacles_xml += f"""
     <model name='dynamic_obstacle_{i}'>
@@ -168,7 +172,7 @@ def generate_gazebo_assets():
       </plugin>
     </model>"""
             
-        print(f"[OK] Grouped {obstacle_id} vertical obstacle cylinders for the Gazebo world and appended 5 red dynamic obstacles.")
+        print(f"[OK] Grouped {obstacle_id} vertical obstacle cylinders for the Gazebo world and appended 20 red dynamic obstacles.")
         
     # 3. Compile Gazebo World file
     world_content = f"""<?xml version="1.0" ?>

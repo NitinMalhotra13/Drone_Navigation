@@ -114,6 +114,15 @@ def generate_gazebo_assets():
       </ode>
     </physics>
 
+    <!-- GUI User Camera Pose facing the heightmap terrain center directly -->
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <pose>50.0 -15.0 50.0 0.0 0.65 1.5707</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+
     <!-- Sun directional light -->
     <include>
       <uri>model://sun</uri>

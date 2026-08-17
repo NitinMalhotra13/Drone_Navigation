@@ -30,7 +30,7 @@ def generate_gazebo_assets():
     
     # Resize to 129x129 for Gazebo Classic terrain LOD alignment
     img = Image.fromarray(scaled_terrain, mode='L')
-    img_resized = img.resize((129, 129), Image.Resampling.BILINEAR)
+    img_resized = img.resize((129, 129), Image.BILINEAR)
     
     heightmap_png_path = os.path.join(models_dir, "terrain_heightmap.png")
     img_resized.save(heightmap_png_path)

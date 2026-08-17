@@ -35,8 +35,8 @@ class LowLevelControllerNode(Node):
             )
         
         # Subscribers
-        self.fleet_state_sub = self.create_subscriber(Float32MultiArray, '/whiteboard/fleet_state', self.fleet_state_callback, 10)
-        self.active_wps_sub = self.create_subscriber(Float32MultiArray, '/drones/active_waypoints', self.active_wps_callback, 10)
+        self.fleet_state_sub = self.create_subscription(Float32MultiArray, '/whiteboard/fleet_state', self.fleet_state_callback, 10)
+        self.active_wps_sub = self.create_subscription(Float32MultiArray, '/drones/active_waypoints', self.active_wps_callback, 10)
         
         # Load PPO Models if enabled
         self.model = None

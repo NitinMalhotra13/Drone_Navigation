@@ -50,8 +50,8 @@ class WhiteboardNode(Node):
         self.coverage_map_pub = self.create_publisher(Float32MultiArray, '/whiteboard/coverage_map', 10)
         
         # Subscribers
-        self.states_sub = self.create_subscriber(Float32MultiArray, '/drones/states', self.raw_states_callback, 10)
-        self.map_sub = self.create_subscriber(Float32MultiArray, '/map/coverage', self.raw_map_callback, 10)
+        self.states_sub = self.create_subscription(Float32MultiArray, '/drones/states', self.raw_states_callback, 10)
+        self.map_sub = self.create_subscription(Float32MultiArray, '/map/coverage', self.raw_map_callback, 10)
         
         # Per-drone sensor subscriptions
         self.lidar_subs = []
@@ -66,19 +66,19 @@ class WhiteboardNode(Node):
         for i in range(self.n_drones):
             # Capture scope variables using default arguments in lambda
             self.lidar_subs.append(
-                self.create_subscriber(LaserScan, f'/drone_{i}/lidar', 
+                self.create_subscription(LaserScan, f'/drone_{i}/lidar', 
                                       lambda msg, idx=i: self.lidar_callback(msg, idx), 10)
             )
             self.camera_subs.append(
-                self.create_subscriber(Float32MultiArray, f'/drone_{i}/camera', 
+                self.create_subscription(Float32MultiArray, f'/drone_{i}/camera', 
                                       lambda msg, idx=i: self.camera_callback(msg, idx), 10)
             )
             self.range_subs.append(
-                self.create_subscriber(Range, f'/drone_{i}/range', 
+                self.create_subscription(Range, f'/drone_{i}/range', 
                                       lambda msg, idx=i: self.range_callback(msg, idx), 10)
             )
             self.imu_subs.append(
-                self.create_subscriber(Imu, f'/drone_{i}/imu', 
+                self.create_subscription(Imu, f'/drone_{i}/imu', 
                                       lambda msg, idx=i: self.imu_callback(msg, idx), 10)
             )
             

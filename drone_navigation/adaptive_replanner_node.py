@@ -32,9 +32,9 @@ class AdaptiveReplannerNode(Node):
         self.active_waypoints_pub = self.create_publisher(Float32MultiArray, '/drones/active_waypoints', 10)
         
         # Subscribers
-        self.global_wps_sub = self.create_subscriber(Float32MultiArray, '/drones/global_waypoints', self.global_wps_callback, 10)
-        self.fleet_state_sub = self.create_subscriber(Float32MultiArray, '/whiteboard/fleet_state', self.fleet_state_callback, 10)
-        self.coverage_map_sub = self.create_subscriber(Float32MultiArray, '/whiteboard/coverage_map', self.coverage_map_callback, 10)
+        self.global_wps_sub = self.create_subscription(Float32MultiArray, '/drones/global_waypoints', self.global_wps_callback, 10)
+        self.fleet_state_sub = self.create_subscription(Float32MultiArray, '/whiteboard/fleet_state', self.fleet_state_callback, 10)
+        self.coverage_map_sub = self.create_subscription(Float32MultiArray, '/whiteboard/coverage_map', self.coverage_map_callback, 10)
         
         # Timers
         # Timer to run tracking & arrival check at 10Hz

@@ -15,7 +15,7 @@ class GlobalPlannerNode(Node):
         # ROS Parameters
         self.declare_parameter('n_drones', 6)
         self.declare_parameter('n_waypoints', 12)
-        self.declare_parameter('fa_iterations', 40)
+        self.declare_parameter('fa_iterations', 10)
         
         self.n_drones = self.get_parameter('n_drones').get_parameter_value().integer_value
         self.n_waypoints = self.get_parameter('n_waypoints').get_parameter_value().integer_value
@@ -37,6 +37,7 @@ class GlobalPlannerNode(Node):
         planner = FireflyPlanner(
             n_drones=self.n_drones,
             n_waypoints=self.n_waypoints,
+            n_fireflies=15,
             max_iter=self.fa_iterations
         )
         

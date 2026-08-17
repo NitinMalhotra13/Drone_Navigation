@@ -13,7 +13,7 @@ class AdaptiveReplannerNode(Node):
         
         # ROS Parameters
         self.declare_parameter('n_drones', 6)
-        self.declare_parameter('n_waypoints_fa', 12)
+        self.declare_parameter('n_waypoints_fa', 20)
         self.declare_parameter('replan_interval_sec', 15.0) # corresponds to 150 steps at 10Hz
         
         self.n_drones = self.get_parameter('n_drones').get_parameter_value().integer_value

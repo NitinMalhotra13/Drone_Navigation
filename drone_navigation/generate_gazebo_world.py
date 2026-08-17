@@ -170,13 +170,13 @@ def generate_gazebo_assets():
 <sdf version="1.6">
   <world name="drone_coverage_world">
     <physics name="default_physics" default="1" type="ode">
-      <max_step_size>0.01</max_step_size>
+      <max_step_size>0.005</max_step_size>
       <real_time_factor>1.0</real_time_factor>
-      <real_time_update_rate>100</real_time_update_rate>
+      <real_time_update_rate>200</real_time_update_rate>
       <ode>
         <solver>
           <type>quick</type>
-          <iters>10</iters>
+          <iters>20</iters>
           <sor>1.3</sor>
         </solver>
         <constraints>

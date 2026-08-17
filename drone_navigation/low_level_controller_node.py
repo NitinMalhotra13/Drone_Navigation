@@ -12,7 +12,7 @@ class LowLevelControllerNode(Node):
         
         # ROS Parameters
         self.declare_parameter('n_drones', 6)
-        self.declare_parameter('n_waypoints_fa', 12)
+        self.declare_parameter('n_waypoints_fa', 20)
         self.declare_parameter('use_ppo', True)
         
         self.n_drones = self.get_parameter('n_drones').get_parameter_value().integer_value

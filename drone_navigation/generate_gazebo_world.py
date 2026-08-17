@@ -59,9 +59,9 @@ def generate_gazebo_assets():
                     gy = y + 0.5
                     has_tree = True
                 else:
-                    # Procedurally increase tree density: 12% chance to spawn an extra tree in empty cells
+                    # Procedurally increase tree density: 2.5% chance to spawn an extra tree in empty cells
                     # Exclude the starting zone (x < 10 and y < 10) to avoid blocking the drone spawning zone
-                    if (x > 10 or y > 10) and np.random.random() < 0.12:
+                    if (x > 10 or y > 10) and np.random.random() < 0.025:
                         height = float(np.random.uniform(3.0, 9.0))
                         center_z = height / 2.0
                         gx = x + 0.5
@@ -69,28 +69,19 @@ def generate_gazebo_assets():
                         has_tree = True
                 
                 if has_tree:
-                    # Generate a realistic tree model (narrow brown trunk + green canopy sphere at the top)
+                    # Generate a realistic tree model with single simplified cylinder collision for ultra-fast physics
                     static_obstacles_xml += f"""
     <model name='obstacle_{obstacle_id}'>
       <static>1</static>
       <pose>{gx} {gy} {center_z} 0 0 0</pose>
       <link name='link'>
-        <!-- Trunk Collision -->
-        <collision name='collision_trunk'>
+        <!-- Single Simplified Tree Collision for high FPS physics -->
+        <collision name='collision'>
           <geometry>
             <cylinder>
-              <radius>0.15</radius>
+              <radius>0.35</radius>
               <length>{height}</length>
             </cylinder>
-          </geometry>
-        </collision>
-        <!-- Canopy Collision -->
-        <collision name='collision_canopy'>
-          <pose>0 0 {height / 2.0}</pose>
-          <geometry>
-            <sphere>
-              <radius>0.6</radius>
-            </sphere>
           </geometry>
         </collision>
         <!-- Trunk Visual (Brown Wood) -->
@@ -185,7 +176,7 @@ def generate_gazebo_assets():
       <ode>
         <solver>
           <type>quick</type>
-          <iters>50</iters>
+          <iters>10</iters>
           <sor>1.3</sor>
         </solver>
         <constraints>

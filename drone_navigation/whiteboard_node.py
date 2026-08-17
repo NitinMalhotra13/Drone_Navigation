@@ -64,22 +64,22 @@ class WhiteboardNode(Node):
         self.last_range = np.zeros(self.n_drones, dtype=np.float32)
         
         for i in range(self.n_drones):
-            # Capture scope variables using default arguments in lambda
+            # Capture scope variables using clean single-argument lambda closures
             self.lidar_subs.append(
                 self.create_subscription(LaserScan, f'/drone_{i}/lidar', 
-                                      lambda msg, idx=i: self.lidar_callback(msg, idx), 10)
+                                      self.make_lidar_callback(i), 10)
             )
             self.camera_subs.append(
                 self.create_subscription(Float32MultiArray, f'/drone_{i}/camera', 
-                                      lambda msg, idx=i: self.camera_callback(msg, idx), 10)
+                                      self.make_camera_callback(i), 10)
             )
             self.range_subs.append(
                 self.create_subscription(Range, f'/drone_{i}/range', 
-                                      lambda msg, idx=i: self.range_callback(msg, idx), 10)
+                                      self.make_range_callback(i), 10)
             )
             self.imu_subs.append(
                 self.create_subscription(Imu, f'/drone_{i}/imu', 
-                                      lambda msg, idx=i: self.imu_callback(msg, idx), 10)
+                                      self.make_imu_callback(i), 10)
             )
             
         # State publisher timer (updates whiteboard registry at 10Hz)
@@ -217,6 +217,19 @@ class WhiteboardNode(Node):
         map_msg = Float32MultiArray()
         map_msg.data = self.fused_coverage.flatten().tolist()
         self.coverage_map_pub.publish(map_msg)
+
+    # Callback closures factories to cleanly pass single arguments
+    def make_lidar_callback(self, idx):
+        return lambda msg: self.lidar_callback(msg, idx)
+
+    def make_camera_callback(self, idx):
+        return lambda msg: self.camera_callback(msg, idx)
+
+    def make_range_callback(self, idx):
+        return lambda msg: self.range_callback(msg, idx)
+
+    def make_imu_callback(self, idx):
+        return lambda msg: self.imu_callback(msg, idx)
 
 def main(args=None):
     rclpy.init(args=args)

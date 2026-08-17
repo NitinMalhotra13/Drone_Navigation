@@ -32,6 +32,7 @@ setup(
             'adaptive_replanner = drone_navigation.adaptive_replanner_node:main',
             'low_level_controller = drone_navigation.low_level_controller_node:main',
             'visualizer = drone_navigation.visualizer_node:main',
+            'dynamic_obstacles = drone_navigation.dynamic_obstacles_node:main',
         ],
     },
 )

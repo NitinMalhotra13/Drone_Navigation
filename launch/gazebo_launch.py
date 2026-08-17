@@ -91,6 +91,14 @@ def generate_launch_description():
         parameters=[{'use_sim_time': True}]
     )
     
+    dynamic_obstacles = Node(
+        package='drone_navigation',
+        executable='dynamic_obstacles',
+        name='dynamic_obstacles_controller',
+        output='screen',
+        parameters=[{'use_sim_time': True}]
+    )
+    
     return LaunchDescription([
         gui_arg,
         gazebo_launch,
@@ -98,5 +106,6 @@ def generate_launch_description():
         whiteboard,
         global_planner,
         adaptive_replanner,
-        low_level_controller
+        low_level_controller,
+        dynamic_obstacles
     ])

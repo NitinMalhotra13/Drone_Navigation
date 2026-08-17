@@ -43,21 +43,32 @@ def generate_gazebo_assets():
         tx, ty, tz = static_obs.shape
         
         obstacle_id = 0
-        # Group obstacle cells vertically to form cylinders/boxes
+        # Group obstacle cells vertically to form cylinders/boxes, adding height randomness & extra trees
         for x in range(tx):
             for y in range(ty):
                 z_indices = np.where(static_obs[x, y, :])[0]
+                has_tree = False
+                gx, gy, height, center_z = 0.0, 0.0, 0.0, 0.0
+                
                 if len(z_indices) > 0:
                     z_start = float(z_indices[0])
-                    z_end = float(z_indices[-1] + 1)
-                    height = z_end - z_start
+                    # Apply random height scaling (between 0.7x and 2.0x) to existing trees
+                    height = (float(z_indices[-1] + 1) - z_start) * np.random.uniform(0.7, 2.0)
                     center_z = z_start + (height / 2.0)
-                    
-                    # Convert to Gazebo coordinates
-                    # (x, y) map to center of cell: (x + 0.5, y + 0.5)
                     gx = x + 0.5
                     gy = y + 0.5
-                    
+                    has_tree = True
+                else:
+                    # Procedurally increase tree density: 12% chance to spawn an extra tree in empty cells
+                    # Exclude the starting zone (x < 10 and y < 10) to avoid blocking the drone spawning zone
+                    if (x > 10 or y > 10) and np.random.random() < 0.12:
+                        height = float(np.random.uniform(3.0, 9.0))
+                        center_z = height / 2.0
+                        gx = x + 0.5
+                        gy = y + 0.5
+                        has_tree = True
+                
+                if has_tree:
                     # Generate a realistic tree model (narrow brown trunk + green canopy sphere at the top)
                     static_obstacles_xml += f"""
     <model name='obstacle_{obstacle_id}'>
@@ -115,7 +126,49 @@ def generate_gazebo_assets():
       </link>
     </model>"""
                     obstacle_id += 1
-        print(f"[OK] Grouped {obstacle_id} vertical obstacle cylinders for the Gazebo world.")
+        
+        # Add 5 dynamic moving obstacles (red spheres with planar move plugin)
+        dynamic_starts = [
+            (20.0, 20.0), (40.0, 40.0), (60.0, 60.0), (80.0, 80.0), (30.0, 70.0)
+        ]
+        for i, (dx, dy) in enumerate(dynamic_starts):
+            static_obstacles_xml += f"""
+    <model name='dynamic_obstacle_{i}'>
+      <pose>{dx} {dy} 0.5 0 0 0</pose>
+      <link name='link'>
+        <!-- Collision sphere -->
+        <collision name='collision'>
+          <geometry>
+            <sphere>
+              <radius>0.5</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <!-- Visual sphere (Red) -->
+        <visual name='visual'>
+          <geometry>
+            <sphere>
+              <radius>0.5</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Red</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+      <!-- Planar move plugin for dynamic velocity controller -->
+      <plugin name='planar_move_{i}' filename='libgazebo_ros_planar_move.so'>
+        <ros>
+          <namespace>/dynamic_obstacle_{i}</namespace>
+        </ros>
+        <robot_base_frame>link</robot_base_frame>
+      </plugin>
+    </model>"""
+            
+        print(f"[OK] Grouped {obstacle_id} vertical obstacle cylinders for the Gazebo world and appended 5 red dynamic obstacles.")
         
     # 3. Compile Gazebo World file
     world_content = f"""<?xml version="1.0" ?>

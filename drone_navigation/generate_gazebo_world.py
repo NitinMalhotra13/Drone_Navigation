@@ -58,24 +58,35 @@ def generate_gazebo_assets():
                     gx = x + 0.5
                     gy = y + 0.5
                     
-                    # Generate a cylindrical model for each obstacle column (trees/rocks)
+                    # Generate a realistic tree model (narrow brown trunk + green canopy sphere at the top)
                     static_obstacles_xml += f"""
     <model name='obstacle_{obstacle_id}'>
       <static>1</static>
       <pose>{gx} {gy} {center_z} 0 0 0</pose>
       <link name='link'>
-        <collision name='collision'>
+        <!-- Trunk Collision -->
+        <collision name='collision_trunk'>
           <geometry>
             <cylinder>
-              <radius>0.45</radius>
+              <radius>0.15</radius>
               <length>{height}</length>
             </cylinder>
           </geometry>
         </collision>
-        <visual name='visual'>
+        <!-- Canopy Collision -->
+        <collision name='collision_canopy'>
+          <pose>0 0 {height / 2.0}</pose>
+          <geometry>
+            <sphere>
+              <radius>0.6</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <!-- Trunk Visual (Brown Wood) -->
+        <visual name='visual_trunk'>
           <geometry>
             <cylinder>
-              <radius>0.45</radius>
+              <radius>0.15</radius>
               <length>{height}</length>
             </cylinder>
           </geometry>
@@ -83,6 +94,21 @@ def generate_gazebo_assets():
             <script>
               <uri>file://media/materials/scripts/gazebo.material</uri>
               <name>Gazebo/Wood</name>
+            </script>
+          </material>
+        </visual>
+        <!-- Canopy Visual (Green Foliage Bushes) -->
+        <visual name='visual_canopy'>
+          <pose>0 0 {height / 2.0}</pose>
+          <geometry>
+            <sphere>
+              <radius>0.6</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Green</name>
             </script>
           </material>
         </visual>

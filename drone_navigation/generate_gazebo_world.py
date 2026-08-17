@@ -69,8 +69,45 @@ def generate_gazebo_assets():
                         has_tree = True
                 
                 if has_tree:
-                    # Generate a realistic tree model with single simplified cylinder collision for ultra-fast physics
-                    static_obstacles_xml += f"""
+                    # 70% chance it is a Tree, 30% chance it is a Rock
+                    np.random.seed(int(gx * 100 + gy))
+                    is_rock = (np.random.random() < 0.3)
+                    
+                    if is_rock:
+                        # Generate a realistic Rock model (grey sphere)
+                        rock_radius = float(np.random.uniform(0.4, 0.9))
+                        # Reposition Z so rock sits on the ground
+                        rock_z = rock_radius / 2.0
+                        static_obstacles_xml += f"""
+    <model name='obstacle_{obstacle_id}'>
+      <static>1</static>
+      <pose>{gx} {gy} {rock_z} 0 0 0</pose>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry>
+            <sphere>
+              <radius>{rock_radius}</radius>
+            </sphere>
+          </geometry>
+        </collision>
+        <visual name='visual'>
+          <geometry>
+            <sphere>
+              <radius>{rock_radius}</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>"""
+                    else:
+                        # Generate a realistic tree model with single simplified cylinder collision for ultra-fast physics
+                        static_obstacles_xml += f"""
     <model name='obstacle_{obstacle_id}'>
       <static>1</static>
       <pose>{gx} {gy} {center_z} 0 0 0</pose>
@@ -220,10 +257,28 @@ def generate_gazebo_assets():
             <heightmap>
               <use_terrain_paging>false</use_terrain_paging>
               <texture>
+                <diffuse>file://media/materials/textures/grass_diffusespecular.png</diffuse>
+                <normal>file://media/materials/textures/flat_normal.png</normal>
+                <size>5.0</size>
+              </texture>
+              <texture>
                 <diffuse>file://media/materials/textures/dirt_diffusespecular.png</diffuse>
                 <normal>file://media/materials/textures/flat_normal.png</normal>
                 <size>10.0</size>
               </texture>
+              <texture>
+                <diffuse>file://media/materials/textures/fungus_diffusespecular.png</diffuse>
+                <normal>file://media/materials/textures/flat_normal.png</normal>
+                <size>20.0</size>
+              </texture>
+              <blend>
+                <min_height>0.5</min_height>
+                <fade_dist>1.0</fade_dist>
+              </blend>
+              <blend>
+                <min_height>2.0</min_height>
+                <fade_dist>2.0</fade_dist>
+              </blend>
               <uri>file://{heightmap_png_path}</uri>
               <size>100.0 100.0 {max_height}</size>
               <pos>50.0 50.0 0.0</pos>

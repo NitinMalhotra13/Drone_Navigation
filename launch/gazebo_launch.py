@@ -50,6 +50,7 @@ def generate_launch_description():
                 arguments=[
                     '-file', urdf_path,
                     '-entity', f'drone_{i}',
+                    '-robot_namespace', f'drone_{i}',
                     '-x', str(sx),
                     '-y', str(sy),
                     '-z', '0.5'

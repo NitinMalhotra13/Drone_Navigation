@@ -193,13 +193,6 @@ def generate_gazebo_assets():
           </material>
         </visual>
       </link>
-      <!-- Planar move plugin for dynamic velocity controller -->
-      <plugin name='planar_move_{i}' filename='libgazebo_ros_planar_move.so'>
-        <ros>
-          <namespace>/dynamic_obstacle_{i}</namespace>
-        </ros>
-        <robot_base_frame>link</robot_base_frame>
-      </plugin>
     </model>"""
             
         print(f"[OK] Grouped {obstacle_id} vertical obstacle cylinders for the Gazebo world and appended 25 red dynamic obstacles.")

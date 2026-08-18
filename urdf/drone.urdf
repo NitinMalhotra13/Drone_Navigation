@@ -22,6 +22,11 @@
         <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
+  </link>
+
+  <gazebo reference="base_link">
+    <material>Gazebo/Black</material>
+  </gazebo>
 
   <!-- LiDAR Sensor Link and Joint -->
   <link name="lidar_link">

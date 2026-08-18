@@ -168,6 +168,8 @@ def generate_gazebo_assets():
     <model name='dynamic_obstacle_{i}'>
       <pose>{dx} {dy} 0.5 0 0 0</pose>
       <link name='link'>
+        <!-- Disable gravity for 3D bird-like flight -->
+        <gravity>0</gravity>
         <!-- Collision sphere -->
         <collision name='collision'>
           <geometry>
@@ -202,10 +204,16 @@ def generate_gazebo_assets():
             
         print(f"[OK] Grouped {obstacle_id} vertical obstacle cylinders for the Gazebo world and appended 25 red dynamic obstacles.")
         
-    # 3. Compile Gazebo World file
     world_content = f"""<?xml version="1.0" ?>
 <sdf version="1.6">
   <world name="drone_coverage_world">
+    <!-- State plugin to enable model positioning over ROS2 topics -->
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so">
+      <ros>
+        <namespace>/gazebo</namespace>
+      </ros>
+    </plugin>
+
     <physics name="default_physics" default="1" type="ode">
       <max_step_size>0.005</max_step_size>
       <real_time_factor>1.0</real_time_factor>

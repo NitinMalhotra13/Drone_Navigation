@@ -10,100 +10,18 @@
     <collision name="collision">
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.4 0.4 0.12"/>
+        <sphere radius="0.25"/>
       </geometry>
     </collision>
-    <!-- Central Hub Visual -->
-    <visual name="visual_hub">
+    <visual name="visual">
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <sphere radius="0.1"/>
+        <sphere radius="0.25"/>
       </geometry>
-      <material name="blue">
-        <color rgba="0.1 0.1 0.8 1.0"/>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
-    <!-- Arm 1 (Front-Right) -->
-    <visual name="visual_arm_fr">
-      <origin xyz="0.12 0.12 0" rpy="0 0 0.785"/>
-      <geometry>
-        <box size="0.25 0.03 0.02"/>
-      </geometry>
-      <material name="dark_grey">
-        <color rgba="0.2 0.2 0.2 1.0"/>
-      </material>
-    </visual>
-    <!-- Arm 2 (Front-Left) -->
-    <visual name="visual_arm_fl">
-      <origin xyz="-0.12 0.12 0" rpy="0 0 -0.785"/>
-      <geometry>
-        <box size="0.25 0.03 0.02"/>
-      </geometry>
-      <material name="dark_grey">
-        <color rgba="0.2 0.2 0.2 1.0"/>
-      </material>
-    </visual>
-    <!-- Arm 3 (Back-Right) -->
-    <visual name="visual_arm_br">
-      <origin xyz="0.12 -0.12 0" rpy="0 0 -0.785"/>
-      <geometry>
-        <box size="0.25 0.03 0.02"/>
-      </geometry>
-      <material name="dark_grey">
-        <color rgba="0.2 0.2 0.2 1.0"/>
-      </material>
-    </visual>
-    <!-- Arm 4 (Back-Left) -->
-    <visual name="visual_arm_bl">
-      <origin xyz="-0.12 -0.12 0" rpy="0 0 0.785"/>
-      <geometry>
-        <box size="0.25 0.03 0.02"/>
-      </geometry>
-      <material name="dark_grey">
-        <color rgba="0.2 0.2 0.2 1.0"/>
-      </material>
-    </visual>
-    <!-- Rotor 1 (Front-Right) -->
-    <visual name="visual_rotor_fr">
-      <origin xyz="0.2 0.2 0.015" rpy="0 0 0"/>
-      <geometry>
-        <cylinder radius="0.1" length="0.005"/>
-      </geometry>
-      <material name="light_grey">
-        <color rgba="0.7 0.7 0.7 0.5"/>
-      </material>
-    </visual>
-    <!-- Rotor 2 (Front-Left) -->
-    <visual name="visual_rotor_fl">
-      <origin xyz="-0.2 0.2 0.015" rpy="0 0 0"/>
-      <geometry>
-        <cylinder radius="0.1" length="0.005"/>
-      </geometry>
-      <material name="light_grey">
-        <color rgba="0.7 0.7 0.7 0.5"/>
-      </material>
-    </visual>
-    <!-- Rotor 3 (Back-Right) -->
-    <visual name="visual_rotor_br">
-      <origin xyz="0.2 -0.2 0.015" rpy="0 0 0"/>
-      <geometry>
-        <cylinder radius="0.1" length="0.005"/>
-      </geometry>
-      <material name="light_grey">
-        <color rgba="0.7 0.7 0.7 0.5"/>
-      </material>
-    </visual>
-    <!-- Rotor 4 (Back-Left) -->
-    <visual name="visual_rotor_bl">
-      <origin xyz="-0.2 -0.2 0.015" rpy="0 0 0"/>
-      <geometry>
-        <cylinder radius="0.1" length="0.005"/>
-      </geometry>
-      <material name="light_grey">
-        <color rgba="0.7 0.7 0.7 0.5"/>
-      </material>
-    </visual>
-  </link>
 
   <!-- LiDAR Sensor Link and Joint -->
   <link name="lidar_link">

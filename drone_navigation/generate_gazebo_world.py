@@ -182,7 +182,7 @@ def generate_gazebo_assets():
         <visual name='visual'>
           <geometry>
             <sphere>
-              <radius>0.5</radius>
+              <radius>1.2</radius>
             </sphere>
           </geometry>
           <material>

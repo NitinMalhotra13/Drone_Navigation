@@ -79,7 +79,7 @@ def generate_gazebo_assets():
                         # Reposition Z so rock sits on the ground
                         rock_z = rock_radius / 2.0
                         static_obstacles_xml += f"""
-    <model name='obstacle_{obstacle_id}'>
+    <model name='rock_{obstacle_id}'>
       <static>1</static>
       <pose>{gx} {gy} {rock_z} 0 0 0</pose>
       <link name='link'>
@@ -108,7 +108,7 @@ def generate_gazebo_assets():
                     else:
                         # Generate a realistic tree model with single simplified cylinder collision for ultra-fast physics
                         static_obstacles_xml += f"""
-    <model name='obstacle_{obstacle_id}'>
+    <model name='tree_{obstacle_id}'>
       <static>1</static>
       <pose>{gx} {gy} {center_z} 0 0 0</pose>
       <link name='link'>
@@ -163,9 +163,11 @@ def generate_gazebo_assets():
             dy = float(np.random.uniform(15.0, 90.0))
             dynamic_starts.append((dx, dy))
             
+        animal_names = ["bird", "monkey", "squirrel", "eagle", "hawk", "owl", "bat", "crow", "sparrow", "falcon", "dove", "butterfly", "woodpecker", "parrot", "seagull", "swan", "robin", "finch", "heron", "crane", "pelican", "duck", "goose", "pigeon", "cardinal"]
         for i, (dx, dy) in enumerate(dynamic_starts):
+            name = f"{animal_names[i % len(animal_names)]}_{i}"
             static_obstacles_xml += f"""
-    <model name='dynamic_obstacle_{i}'>
+    <model name='{name}'>
       <pose>{dx} {dy} 0.5 0 0 0</pose>
       <link name='link'>
         <!-- Disable gravity for 3D bird-like flight -->

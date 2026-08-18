@@ -218,6 +218,27 @@ class WhiteboardNode(Node):
         map_msg.data = self.fused_coverage.flatten().tolist()
         self.coverage_map_pub.publish(map_msg)
 
+        # Periodically print whiteboard status to console (every 2.0 seconds)
+        now = self.get_clock().now().nanoseconds / 1e9
+        if not hasattr(self, 'last_print_time'):
+            self.last_print_time = 0.0
+        if now - self.last_print_time >= 2.0:
+            self.last_print_time = now
+            cov_pct = float(np.sum(self.fused_coverage)) / (100 * 100) * 100.0
+            self.get_logger().info(f"\n=================== WHITEBOARD Fleet Status ===================")
+            self.get_logger().info(f"FUSED AREA COVERAGE: {cov_pct:.2f}%")
+            self.get_logger().info(f"DETECTED OBSTACLES : {len(self.detected_obstacles)} found")
+            for i in range(self.n_drones):
+                pos = self.fused_states[i, :3]
+                vel = self.fused_states[i, 3:6]
+                bat = self.fused_states[i, 6]
+                self.get_logger().info(
+                    f"  Drone {i} | Pos: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}) | "
+                    f"Vel: ({vel[0]:.2f}, {vel[1]:.2f}, {vel[2]:.2f}) | "
+                    f"Battery: {bat:.1f}%"
+                )
+            self.get_logger().info(f"===============================================================")
+
     # Callback closures factories to cleanly pass single arguments
     def make_lidar_callback(self, idx):
         return lambda msg: self.lidar_callback(msg, idx)

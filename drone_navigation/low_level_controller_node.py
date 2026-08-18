@@ -108,9 +108,44 @@ class LowLevelControllerNode(Node):
         # Target waypoint for each drone (size: n_drones x 3)
         targets = np.zeros((self.n_drones, 3), dtype=np.float32)
         max_wp = self.n_waypoints_fa - 1
+        
+        # Initialize flight phases and starting positions
+        if not hasattr(self, 'drone_starts'):
+            self.drone_starts = None
+            self.drone_phases = ["takeoff"] * self.n_drones
+            
+        if self.drone_starts is None and np.any(self.fused_states[:, :3] != 0.0):
+            self.drone_starts = self.fused_states[:, :3].copy()
+            self.get_logger().info("Initialized drone start coordinates for takeoff/landing phases.")
+            
         for i in range(self.n_drones):
-            wp_idx = min(self.current_wp_idx[i], max_wp)
-            targets[i] = self.active_waypoints[i, wp_idx]
+            pos = self.fused_states[i, :3]
+            
+            # Phase Transitions
+            if self.drone_phases[i] == "takeoff":
+                if pos[2] >= 5.8:
+                    self.drone_phases[i] = "cruise"
+                    self.get_logger().info(f"Drone {i} reached cruise altitude (6.0m). Commencing waypoint sweeps.")
+            elif self.drone_phases[i] == "cruise":
+                wp_idx = min(self.current_wp_idx[i], max_wp)
+                if wp_idx == max_wp:
+                    target_wp = self.active_waypoints[i, wp_idx]
+                    if np.linalg.norm(pos - target_wp) < 3.5:
+                        self.drone_phases[i] = "land"
+                        self.get_logger().info(f"Drone {i} completed mission. Initiating landing sequence.")
+            
+            # Position targeting based on active flight phase
+            if self.drone_phases[i] == "takeoff" and self.drone_starts is not None:
+                targets[i, 0] = self.drone_starts[i, 0]
+                targets[i, 1] = self.drone_starts[i, 1]
+                targets[i, 2] = 6.0
+            elif self.drone_phases[i] == "land" and self.drone_starts is not None:
+                targets[i, 0] = self.drone_starts[i, 0]
+                targets[i, 1] = self.drone_starts[i, 1]
+                targets[i, 2] = 0.0
+            else:
+                wp_idx = min(self.current_wp_idx[i], max_wp)
+                targets[i] = self.active_waypoints[i, wp_idx]
             
         if self.use_ppo and self.model is not None and self.vecnorm is not None:
             # PPO Low level control (with 3-drone to 6-drone observation padding)
